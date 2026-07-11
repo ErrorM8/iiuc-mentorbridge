@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         Int      @id @default(autoincrement())
+  name       String
+  email      String   @unique
+  password   String
+  studentId  String?
+  bloodGroup String?
+  gender     String?
+  batch      String?
+  department String?
+  role       String   @default("junior")
+  bio        String?
+  skills     String?
+  createdAt  DateTime @default(now())
+
+  sentRequests     Connection[] @relation("SentRequests")
+  receivedRequests Connection[] @relation("ReceivedRequests")
+  notifications        Notification[] @relation("NotificationUser")
+  sentNotifications    Notification[] @relation("NotificationSender")
+  posts            Post[]
+  comments Comment[]
+  likes    Like[]
+  commentReactions CommentReaction[]
+}
+
+model Connection {
+  id         Int      @id @default(autoincrement())
+  senderId   Int
+  receiverId Int
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+
+  sender   User @relation("SentRequests", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedRequests", fields: [receiverId], references: [id])
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  content   String
+  type      String   @default("general")
+  userId    Int
+  createdAt DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id])
+  comments Comment[]
+  likes    Like[]
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  content   String
+  userId    Int
+  postId    Int
+  parentId  Int?
+  createdAt DateTime @default(now())
+
+  user     User      @relation(fields: [userId], references: [id])
+  post     Post      @relation(fields: [postId], references: [id])
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+  reactions CommentReaction[]
+}
+
+model CommentReaction {
+  id        Int     @id @default(autoincrement())
+  userId    Int
+  commentId Int
+  emoji     String
+
+  user    User    @relation(fields: [userId], references: [id])
+  comment Comment @relation(fields: [commentId], references: [id])
+
+  @@unique([userId, commentId])
+}
+model Like {
+  id     Int @id @default(autoincrement())
+  userId Int
+  postId Int
+
+  user User @relation(fields: [userId], references: [id])
+  post Post @relation(fields: [postId], references: [id])
+
+  @@unique([userId, postId])
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  senderId  Int
+  type      String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user   User @relation("NotificationUser", fields: [userId], references: [id])
+  sender User @relation("NotificationSender", fields: [senderId], references: [id])
+}
