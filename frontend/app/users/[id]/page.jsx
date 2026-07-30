@@ -2,9 +2,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import axios from 'axios';
-import { UserPlus, UserCheck, UserX, MapPin, BookOpen, Droplets, ThumbsUp, MessageCircle } from 'lucide-react';
+import { UserPlus, UserCheck, UserX, MapPin, BookOpen, Droplets, ThumbsUp, MessageCircle, MessageSquare } from 'lucide-react';
 import Navbar from '../../components/Navbar';
 import Footer from '../../components/Footer';
+import Avatar from '../../components/Avatar';
 
 export default function UserProfilePage() {
   const { id } = useParams();
@@ -49,9 +50,8 @@ export default function UserProfilePage() {
       );
       setConnectionStatus('sent');
       setConnectionId(res.data.connection.id);
-    } catch (err) {
-      alert(err.response?.data?.message || 'Something went wrong');
-    } finally { setActionLoading(false); }
+    } catch (err) { alert(err.response?.data?.message || 'Something went wrong'); }
+    finally { setActionLoading(false); }
   };
 
   const handleDisconnect = async () => {
@@ -69,88 +69,73 @@ export default function UserProfilePage() {
   };
 
   const ConnectButton = () => {
-  const handleAccept = async () => {
-    setActionLoading(true);
-    try {
-      await axios.put(
-        `${process.env.NEXT_PUBLIC_API_URL}/connections/${connectionId}`,
-        { status: 'accepted' },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setConnectionStatus('connected');
-    } catch (err) { console.error(err); }
-    finally { setActionLoading(false); }
+    const handleAccept = async () => {
+      setActionLoading(true);
+      try {
+        await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/connections/${connectionId}`, { status: 'accepted' }, { headers: { Authorization: `Bearer ${token}` } });
+        setConnectionStatus('connected');
+      } catch (err) { console.error(err); } finally { setActionLoading(false); }
+    };
+
+    const handleDecline = async () => {
+      setActionLoading(true);
+      try {
+        await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/connections/${connectionId}`, { status: 'rejected' }, { headers: { Authorization: `Bearer ${token}` } });
+        setConnectionStatus('none');
+        setConnectionId(null);
+      } catch (err) { console.error(err); } finally { setActionLoading(false); }
+    };
+
+    const handleCancel = async () => {
+      if (!confirm('Cancel connection request?')) return;
+      setActionLoading(true);
+      try {
+        await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/connections/cancel`, { receiverId: id }, { headers: { Authorization: `Bearer ${token}` } });
+        setConnectionStatus('none');
+        setConnectionId(null);
+      } catch (err) { console.error(err); } finally { setActionLoading(false); }
+    };
+
+    if (connectionStatus === 'none') return (
+      <button onClick={handleConnect} disabled={actionLoading} className="btn-primary" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem', flexShrink:0}}>
+        <UserPlus size={13}/> {actionLoading ? '...' : 'Connect'}
+      </button>
+    );
+
+    if (connectionStatus === 'sent') return (
+      <div style={{display:'flex', gap:'0.4rem', alignItems:'center', flexShrink:0}}>
+        <span style={{color:'rgba(255,255,255,0.5)', fontSize:'0.78rem', display:'flex', alignItems:'center', gap:'0.25rem'}}>
+          <UserCheck size={13}/> Request Sent
+        </span>
+        <button onClick={handleCancel} disabled={actionLoading} className="btn-danger" style={{padding:'0.35rem 0.65rem', fontSize:'0.75rem'}}>
+          {actionLoading ? '...' : 'Cancel'}
+        </button>
+      </div>
+    );
+
+    if (connectionStatus === 'received') return (
+      <div style={{display:'flex', gap:'0.4rem', flexShrink:0}}>
+        <button onClick={handleAccept} disabled={actionLoading} className="btn-primary" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem'}}>
+          <UserCheck size={13}/> {actionLoading ? '...' : 'Accept'}
+        </button>
+        <button onClick={handleDecline} disabled={actionLoading} className="btn-danger" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem'}}>
+          <UserX size={13}/> {actionLoading ? '...' : 'Decline'}
+        </button>
+      </div>
+    );
+
+    if (connectionStatus === 'connected') return (
+      <div style={{display:'flex', gap:'0.4rem', flexShrink:0, alignItems:'center'}}>
+        <button onClick={() => router.push(`/messages?userId=${id}&userName=${profile?.name}`)} className="btn-primary" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem'}}>
+          <MessageSquare size={13}/> Message
+        </button>
+        <button onClick={handleDisconnect} disabled={actionLoading} className="btn-danger" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem'}}>
+          <UserX size={12}/> {actionLoading ? '...' : 'Disconnect'}
+        </button>
+      </div>
+    );
+    return null;
   };
-
-  const handleDecline = async () => {
-    setActionLoading(true);
-    try {
-      await axios.put(
-        `${process.env.NEXT_PUBLIC_API_URL}/connections/${connectionId}`,
-        { status: 'rejected' },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setConnectionStatus('none');
-      setConnectionId(null);
-    } catch (err) { console.error(err); }
-    finally { setActionLoading(false); }
-  };
-
-  const handleCancel = async () => {
-    if (!confirm('Cancel connection request?')) return;
-    setActionLoading(true);
-    try {
-      await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/connections/cancel`,
-        { receiverId: id },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setConnectionStatus('none');
-      setConnectionId(null);
-    } catch (err) { console.error(err); }
-    finally { setActionLoading(false); }
-  };
-
-  if (connectionStatus === 'none') return (
-    <button onClick={handleConnect} disabled={actionLoading} className="btn-primary" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem', flexShrink:0}}>
-      <UserPlus size={13}/> {actionLoading ? '...' : 'Connect'}
-    </button>
-  );
-
-  if (connectionStatus === 'sent') return (
-    <div style={{display:'flex', gap:'0.4rem', alignItems:'center', flexShrink:0}}>
-      <span style={{color:'rgba(255,255,255,0.5)', fontSize:'0.78rem', display:'flex', alignItems:'center', gap:'0.25rem'}}>
-        <UserCheck size={13}/> Request Sent
-      </span>
-      <button onClick={handleCancel} disabled={actionLoading} className="btn-danger" style={{padding:'0.35rem 0.65rem', fontSize:'0.75rem'}}>
-        {actionLoading ? '...' : 'Cancel'}
-      </button>
-    </div>
-  );
-
-  if (connectionStatus === 'received') return (
-    <div style={{display:'flex', gap:'0.4rem', flexShrink:0}}>
-      <button onClick={handleAccept} disabled={actionLoading} className="btn-primary" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem'}}>
-        <UserCheck size={13}/> {actionLoading ? '...' : 'Accept'}
-      </button>
-      <button onClick={handleDecline} disabled={actionLoading} className="btn-danger" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem'}}>
-        <UserX size={13}/> {actionLoading ? '...' : 'Decline'}
-      </button>
-    </div>
-  );
-
-  if (connectionStatus === 'connected') return (
-    <div style={{display:'flex', gap:'0.4rem', flexShrink:0, alignItems:'center'}}>
-      <span style={{display:'flex', alignItems:'center', gap:'0.3rem', color:'#22c55e', fontSize:'0.8rem', fontWeight:600}}>
-        <UserCheck size={13}/> Connected
-      </span>
-      <button onClick={handleDisconnect} disabled={actionLoading} className="btn-danger" style={{padding:'0.35rem 0.65rem', fontSize:'0.75rem'}}>
-        <UserX size={12}/> {actionLoading ? '...' : 'Disconnect'}
-      </button>
-    </div>
-  );
-  return null;
-};
 
   if (loading) return (
     <div className="page-bg" style={{display:'flex', alignItems:'center', justifyContent:'center'}}>
@@ -164,15 +149,20 @@ export default function UserProfilePage() {
     <div className="page-bg">
       <Navbar user={currentUser}/>
       <div className="center-wrap-sm" style={{flex:1, paddingTop:'1.25rem', paddingBottom:'2rem'}}>
+
         <div className="post-card fade-in" style={{marginBottom:'0.65rem'}}>
           <div style={{display:'flex', alignItems:'center', gap:'1rem', marginBottom:'0.875rem'}}>
-            <div className="avatar" style={{width:'60px', height:'60px', fontSize:'1.5rem', borderRadius:'16px'}}>
-              {profile?.name?.charAt(0).toUpperCase()}
-            </div>
+            <Avatar user={profile} size={62} radius="16px"/>
             <div style={{flex:1}}>
               <h2 style={{fontWeight:700, color:'white', fontSize:'1.1rem'}}>{profile?.name}</h2>
               <div style={{display:'flex', alignItems:'center', gap:'0.4rem', flexWrap:'wrap', marginTop:'0.2rem'}}>
                 <span className={profile?.role === 'senior' ? 'badge-senior' : 'badge-junior'}>{profile?.role}</span>
+                {/* Connected badge - subtle under name */}
+                {connectionStatus === 'connected' && !isOwnProfile && (
+                  <span style={{color:'rgba(34,197,94,0.7)', fontSize:'0.68rem', display:'flex', alignItems:'center', gap:'0.2rem'}}>
+                    <UserCheck size={11}/> Connected
+                  </span>
+                )}
                 {profile?.bloodGroup && (
                   <span style={{color:'#f87171', fontSize:'0.68rem', display:'flex', alignItems:'center', gap:'0.2rem'}}>
                     <Droplets size={10}/>{profile.bloodGroup}
@@ -181,7 +171,11 @@ export default function UserProfilePage() {
                 {profile?.gender && <span style={{color:'rgba(255,255,255,0.3)', fontSize:'0.68rem'}}>• {profile.gender}</span>}
               </div>
             </div>
-            {!isOwnProfile && <ConnectButton/>}
+            {!isOwnProfile && (
+              <div style={{flexShrink:0}}>
+                <ConnectButton/>
+              </div>
+            )}
           </div>
 
           <div style={{display:'flex', flexDirection:'column', gap:'0.4rem', paddingTop:'0.65rem', borderTop:'1px solid rgba(255,255,255,0.06)'}}>
@@ -208,7 +202,14 @@ export default function UserProfilePage() {
             <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
               {posts.map((post) => (
                 <div key={post.id} style={{background:'rgba(255,255,255,0.03)', borderRadius:'9px', padding:'0.65rem 0.85rem', border:'1px solid rgba(255,255,255,0.06)'}}>
-                  <p style={{color:'rgba(255,255,255,0.75)', fontSize:'0.82rem', lineHeight:'1.5'}}>{post.content}</p>
+                  {post.content && <p style={{color:'rgba(255,255,255,0.75)', fontSize:'0.82rem', lineHeight:'1.5'}}>{post.content}</p>}
+                  {post.images && post.images.length > 0 && (
+                    <div style={{display:'flex', gap:'0.35rem', marginTop:'0.4rem', flexWrap:'wrap'}}>
+                      {post.images.map((img, i) => (
+                        <img key={i} src={img.url} alt="" style={{width:'70px', height:'70px', objectFit:'cover', borderRadius:'6px', cursor:'pointer'}} onClick={() => window.open(img.url, '_blank')}/>
+                      ))}
+                    </div>
+                  )}
                   <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginTop:'0.5rem', paddingTop:'0.4rem', borderTop:'1px solid rgba(255,255,255,0.04)'}}>
                     <span style={{color:'rgba(255,255,255,0.2)', fontSize:'0.68rem'}}>{new Date(post.createdAt).toLocaleDateString()}</span>
                     <div style={{marginLeft:'auto', display:'flex', gap:'0.25rem'}}>

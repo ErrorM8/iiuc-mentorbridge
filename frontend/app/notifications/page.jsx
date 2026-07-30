@@ -2,9 +2,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
-import { Bell, UserPlus, UserCheck, UserX, CheckCheck, Check, Heart } from 'lucide-react';
+import { Bell, UserCheck, UserX, CheckCheck, Check, Heart } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import Avatar from '../components/Avatar';
 
 export default function NotificationsPage() {
   const router = useRouter();
@@ -41,7 +42,6 @@ export default function NotificationsPage() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setActionDone(prev => ({ ...prev, [connectionId]: status }));
-      // Refetch notifications to keep previous ones
       const notifRes = await axios.get(
         `${process.env.NEXT_PUBLIC_API_URL}/notifications`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -52,27 +52,42 @@ export default function NotificationsPage() {
 
   const markRead = async (id) => {
     try {
-      await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/notifications/${id}/read`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.put(
+        `${process.env.NEXT_PUBLIC_API_URL}/notifications/${id}/read`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     } catch (err) { console.error(err); }
   };
 
   const markAllRead = async () => {
     try {
-      await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/notifications/mark-all-read`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.put(
+        `${process.env.NEXT_PUBLIC_API_URL}/notifications/mark-all-read`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     } catch (err) { console.error(err); }
+  };
+
+  const handleNotifClick = (notif) => {
+    if (!notif.read) markRead(notif.id);
+    if (notif.type === 'connection_accepted' || notif.type === 'connection_request') {
+      if (notif.sender?.id) router.push(`/users/${notif.sender.id}`);
+    }
   };
 
   const pendingCount = requests.filter(r => !actionDone[r.id]).length;
   const unreadNotifCount = notifications.filter(n => !n.read).length;
   const totalUnread = pendingCount + unreadNotifCount;
 
-  const getNotifIcon = (type) => {
-    if (type === 'connection_request') return { icon: UserPlus, color: '#22c55e' };
-    if (type === 'connection_accepted') return { icon: UserCheck, color: '#60a5fa' };
-    if (type === 'like') return { icon: Heart, color: '#f87171' };
-    return { icon: Bell, color: '#a78bfa' };
+  const getNotifStyle = (type) => {
+    if (type === 'connection_request') return { color: '#22c55e', icon: UserCheck };
+    if (type === 'connection_accepted') return { color: '#60a5fa', icon: UserCheck };
+    if (type === 'like') return { color: '#f87171', icon: Heart };
+    return { color: '#a78bfa', icon: Bell };
   };
 
   if (loading) return (
@@ -86,7 +101,6 @@ export default function NotificationsPage() {
       <Navbar user={user}/>
       <div className="center-wrap-sm" style={{flex:1, paddingTop:'1.25rem', paddingBottom:'2rem'}}>
 
-        {/* Header */}
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
           <div style={{display:'flex', alignItems:'center', gap:'0.5rem'}}>
             <h2 className="heading-text" style={{fontSize:'1.2rem'}}>Notifications</h2>
@@ -113,17 +127,17 @@ export default function NotificationsPage() {
               {requests.map((req) => {
                 const done = actionDone[req.id];
                 return (
-                  <div key={req.id} className="feed-card" style={{display:'flex', alignItems:'center', gap:'0.75rem', opacity: done ? 0.6 : 1}}>
-                    <div className="avatar" style={{width:'38px', height:'38px', fontSize:'0.9rem', borderRadius:'10px', flexShrink:0}}>
-                      {req.sender?.name?.charAt(0).toUpperCase()}
-                    </div>
+                  <div key={req.id} className="feed-card"
+                    style={{display:'flex', alignItems:'center', gap:'0.75rem', opacity: done ? 0.6 : 1, cursor:'pointer'}}
+                    onClick={() => !done && router.push(`/users/${req.sender?.id}`)}>
+                    <Avatar user={req.sender} size={40} radius="10px"/>
                     <div style={{flex:1, minWidth:0}}>
                       <p style={{color:'rgba(255,255,255,0.88)', fontSize:'0.85rem', fontWeight:600}}>{req.sender?.name}</p>
                       <p style={{color:'rgba(255,255,255,0.35)', fontSize:'0.72rem'}}>{req.sender?.department} • Batch {req.sender?.batch}</p>
                       <p style={{color:'rgba(255,255,255,0.25)', fontSize:'0.7rem', marginTop:'0.1rem'}}>Sent you a connection request</p>
                     </div>
                     {!done ? (
-                      <div style={{display:'flex', gap:'0.4rem', flexShrink:0}}>
+                      <div style={{display:'flex', gap:'0.4rem', flexShrink:0}} onClick={e => e.stopPropagation()}>
                         <button onClick={() => handleAction(req.id, 'accepted')} className="btn-primary" style={{padding:'0.35rem 0.7rem', fontSize:'0.78rem'}}>
                           <UserCheck size={13}/> Accept
                         </button>
@@ -143,7 +157,7 @@ export default function NotificationsPage() {
           </div>
         )}
 
-        {/* Other Notifications */}
+        {/* Activity Notifications */}
         {notifications.length > 0 && (
           <div>
             <p style={{color:'rgba(255,255,255,0.35)', fontSize:'0.72rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'0.5rem'}}>
@@ -151,17 +165,21 @@ export default function NotificationsPage() {
             </p>
             <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
               {notifications.map((notif) => {
-                const { icon: Icon, color } = getNotifIcon(notif.type);
+                const { color, icon: Icon } = getNotifStyle(notif.type);
                 return (
                   <div key={notif.id} className="feed-card"
-                    style={{display:'flex', alignItems:'center', gap:'0.75rem', opacity: notif.read ? 0.6 : 1, cursor:'pointer'}}
-                    onClick={() => !notif.read && markRead(notif.id)}
-                  >
-                    <div style={{width:'36px', height:'36px', borderRadius:'10px', background:`${color}18`, border:`1px solid ${color}30`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>
-                      <Icon size={16} color={color}/>
+                    style={{display:'flex', alignItems:'center', gap:'0.75rem', opacity: notif.read ? 0.6 : 1, cursor:'pointer', transition:'opacity 0.2s'}}
+                    onClick={() => handleNotifClick(notif)}>
+                    <div style={{position:'relative', flexShrink:0}}>
+                      <Avatar user={notif.sender} size={38} radius="10px"/>
+                      <div style={{position:'absolute', bottom:'-3px', right:'-3px', width:'16px', height:'16px', borderRadius:'50%', background:`${color}22`, border:`1px solid ${color}`, display:'flex', alignItems:'center', justifyContent:'center'}}>
+                        <Icon size={9} color={color}/>
+                      </div>
                     </div>
                     <div style={{flex:1, minWidth:0}}>
-                      <p style={{color: notif.read ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.88)', fontSize:'0.82rem', lineHeight:'1.45'}}>{notif.message}</p>
+                      <p style={{color: notif.read ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.88)', fontSize:'0.82rem', lineHeight:'1.45'}}>
+                        {notif.message}
+                      </p>
                       <p style={{color:'rgba(255,255,255,0.25)', fontSize:'0.7rem', marginTop:'0.15rem'}}>
                         {new Date(notif.createdAt).toLocaleDateString()} • {new Date(notif.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                       </p>
@@ -175,7 +193,6 @@ export default function NotificationsPage() {
           </div>
         )}
 
-        {/* Empty State */}
         {requests.length === 0 && notifications.length === 0 && (
           <div style={{textAlign:'center', padding:'3rem 1rem'}}>
             <Bell size={40} style={{margin:'0 auto 0.75rem', display:'block', color:'rgba(255,255,255,0.15)'}}/>

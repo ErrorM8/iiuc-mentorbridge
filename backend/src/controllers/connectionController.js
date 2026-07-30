@@ -7,7 +7,6 @@ const sendRequest = async (req, res) => {
       return res.status(400).json({ message: 'Cannot connect with yourself' });
     }
 
-    // Delete any old rejected/disconnected records first
     await prisma.connection.deleteMany({
       where: {
         OR: [
@@ -35,7 +34,11 @@ const sendRequest = async (req, res) => {
       data: { senderId: req.userId, receiverId: parseInt(receiverId) }
     });
 
-    const sender = await prisma.user.findUnique({ where: { id: req.userId }, select: { name: true } });
+    const sender = await prisma.user.findUnique({
+      where: { id: req.userId },
+      select: { name: true }
+    });
+
     await prisma.notification.create({
       data: {
         userId: parseInt(receiverId),
@@ -72,7 +75,7 @@ const getMyRequests = async (req, res) => {
     const requests = await prisma.connection.findMany({
       where: { receiverId: req.userId, status: 'pending' },
       include: {
-        sender: { select: { id: true, name: true, department: true, batch: true, role: true } }
+        sender: { select: { id: true, name: true, department: true, batch: true, role: true, avatar: true } }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -89,8 +92,8 @@ const updateRequest = async (req, res) => {
       where: { id: parseInt(req.params.id) },
       data: { status },
       include: {
-        sender: { select: { id: true, name: true } },
-        receiver: { select: { id: true, name: true } }
+        sender: { select: { id: true, name: true, avatar: true } },
+        receiver: { select: { id: true, name: true, avatar: true } }
       }
     });
 
@@ -159,8 +162,8 @@ const getMyConnections = async (req, res) => {
         ]
       },
       include: {
-        sender: { select: { id: true, name: true, department: true, batch: true } },
-        receiver: { select: { id: true, name: true, department: true, batch: true } }
+        sender: { select: { id: true, name: true, department: true, batch: true, avatar: true } },
+        receiver: { select: { id: true, name: true, department: true, batch: true, avatar: true } }
       }
     });
     res.json(connections);

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="20" fill="#1a2e1a"/>
+  <rect x="46" y="65" width="8" height="25" rx="3" fill="#15803d"/>
+  <path d="M46 85 Q38 90 30 88" stroke="#15803d" strokeWidth="3" strokeLinecap="round" fill="none"/>
+  <path d="M54 85 Q62 90 70 88" stroke="#15803d" strokeWidth="3" strokeLinecap="round" fill="none"/>
+  <path d="M50 65 Q32 48 18 40" stroke="#16a34a" strokeWidth="4" strokeLinecap="round" fill="none"/>
+  <path d="M50 65 Q68 48 82 40" stroke="#16a34a" strokeWidth="4" strokeLinecap="round" fill="none"/>
+  <path d="M50 55 Q40 35 36 20" stroke="#16a34a" strokeWidth="3.5" strokeLinecap="round" fill="none"/>
+  <path d="M50 55 Q60 35 64 20" stroke="#16a34a" strokeWidth="3.5" strokeLinecap="round" fill="none"/>
+  <path d="M50 45 Q50 25 50 12" stroke="#16a34a" strokeWidth="4" strokeLinecap="round" fill="none"/>
+  <circle cx="18" cy="36" r="12" fill="#22c55e"/>
+  <circle cx="82" cy="36" r="12" fill="#22c55e"/>
+  <circle cx="36" cy="16" r="10" fill="#22c55e"/>
+  <circle cx="64" cy="16" r="10" fill="#22c55e"/>
+  <circle cx="50" cy="10" r="12" fill="#22c55e"/>
+  <circle cx="50" cy="10" r="7" fill="#4ade80"/>
+  <circle cx="18" cy="36" r="6" fill="#4ade80"/>
+  <circle cx="82" cy="36" r="6" fill="#4ade80"/>
+</svg>

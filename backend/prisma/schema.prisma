@@ -20,16 +20,20 @@ model User {
   role       String   @default("junior")
   bio        String?
   skills     String?
+  avatar     String?
   createdAt  DateTime @default(now())
 
-  sentRequests     Connection[] @relation("SentRequests")
-  receivedRequests Connection[] @relation("ReceivedRequests")
-  notifications        Notification[] @relation("NotificationUser")
-  sentNotifications    Notification[] @relation("NotificationSender")
-  posts            Post[]
-  comments Comment[]
-  likes    Like[]
-  commentReactions CommentReaction[]
+  sentRequests         Connection[]       @relation("SentRequests")
+  receivedRequests     Connection[]       @relation("ReceivedRequests")
+  posts                Post[]
+  comments             Comment[]
+  likes                Like[]
+  commentReactions     CommentReaction[]
+  notifications        Notification[]     @relation("NotificationUser")
+  sentNotifications    Notification[]     @relation("NotificationSender")
+  sentMessages         Message[]          @relation("SentMessages")
+  receivedMessages     Message[]          @relation("ReceivedMessages")
+  resources            Resource[]
 }
 
 model Connection {
@@ -45,14 +49,22 @@ model Connection {
 
 model Post {
   id        Int      @id @default(autoincrement())
-  content   String
+  content   String?
   type      String   @default("general")
   userId    Int
   createdAt DateTime @default(now())
 
-  user     User      @relation(fields: [userId], references: [id])
+  user     User        @relation(fields: [userId], references: [id])
   comments Comment[]
   likes    Like[]
+  images   PostImage[]
+}
+
+model PostImage {
+  id     Int    @id @default(autoincrement())
+  url    String
+  postId Int
+  post   Post   @relation(fields: [postId], references: [id])
 }
 
 model Comment {
@@ -103,4 +115,52 @@ model Notification {
 
   user   User @relation("NotificationUser", fields: [userId], references: [id])
   sender User @relation("NotificationSender", fields: [senderId], references: [id])
+}
+
+model Message {
+  id         Int      @id @default(autoincrement())
+  content    String
+  senderId   Int
+  receiverId Int
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  sender   User @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
+}
+
+model Department {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  courses Course[]
+}
+
+model Course {
+  id           Int        @id @default(autoincrement())
+  code         String
+  name         String
+  departmentId Int
+  createdAt    DateTime   @default(now())
+
+  department Department @relation(fields: [departmentId], references: [id])
+  resources  Resource[]
+
+  @@unique([code, departmentId])
+}
+
+model Resource {
+  id         Int      @id @default(autoincrement())
+  title      String
+  fileUrl    String
+  fileType   String
+  examType   String
+  aiSummary  String?
+  courseId   Int
+  userId     Int
+  createdAt  DateTime @default(now())
+
+  course Course @relation(fields: [courseId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
 }

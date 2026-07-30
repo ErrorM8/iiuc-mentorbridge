@@ -1,15 +1,54 @@
 const prisma = require('../prismaClient');
+const cloudinary = require('cloudinary').v2;
+const multer = require('multer');
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const storage = multer.memoryStorage();
+const uploadMiddleware = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only images allowed'), false);
+  }
+});
 
 const createPost = async (req, res) => {
   try {
     const { content, type } = req.body;
+
+    let imageUrls = [];
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const result = await new Promise((resolve, reject) => {
+          cloudinary.uploader.upload_stream(
+            { resource_type: 'image', folder: 'mentorbridge/posts' },
+            (error, result) => { if (error) reject(error); else resolve(result); }
+          ).end(file.buffer);
+        });
+        imageUrls.push(result.secure_url);
+      }
+    }
+
     const post = await prisma.post.create({
-      data: { content, type, userId: req.userId },
+      data: {
+        content: content || '',
+        type: type || 'general',
+        userId: req.userId,
+        images: { create: imageUrls.map(url => ({ url })) }
+      },
       include: {
-        user: { select: { id: true, name: true, department: true, batch: true } },
+        user: { select: { id: true, name: true, department: true, batch: true, avatar: true } },
+        images: true,
         _count: { select: { likes: true, comments: true } }
       }
     });
+
     res.status(201).json({ message: 'Post created', post });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -26,7 +65,8 @@ const getAllPosts = async (req, res) => {
       skip, take: limit,
       orderBy: { createdAt: 'desc' },
       include: {
-        user: { select: { id: true, name: true, department: true, batch: true } },
+        user: { select: { id: true, name: true, department: true, batch: true, avatar: true } },
+        images: true,
         _count: { select: { likes: true, comments: true } },
         likes: { select: { userId: true } }
       }
@@ -41,9 +81,22 @@ const getAllPosts = async (req, res) => {
 
 const deletePost = async (req, res) => {
   try {
-    const post = await prisma.post.findUnique({ where: { id: parseInt(req.params.id) } });
+    const post = await prisma.post.findUnique({
+      where: { id: parseInt(req.params.id) },
+      include: { images: true }
+    });
     if (!post) return res.status(404).json({ message: 'Post not found' });
     if (post.userId !== req.userId) return res.status(403).json({ message: 'Unauthorized' });
+
+    for (const img of post.images) {
+      try {
+        const urlParts = img.url.split('/');
+        const publicId = `mentorbridge/posts/${urlParts[urlParts.length - 1].split('.')[0]}`;
+        await cloudinary.uploader.destroy(publicId);
+      } catch (e) { console.log('Image delete skipped'); }
+    }
+
+    await prisma.postImage.deleteMany({ where: { postId: parseInt(req.params.id) } });
     await prisma.like.deleteMany({ where: { postId: parseInt(req.params.id) } });
     await prisma.comment.deleteMany({ where: { postId: parseInt(req.params.id) } });
     await prisma.post.delete({ where: { id: parseInt(req.params.id) } });
@@ -59,11 +112,13 @@ const editPost = async (req, res) => {
     const post = await prisma.post.findUnique({ where: { id: parseInt(req.params.id) } });
     if (!post) return res.status(404).json({ message: 'Post not found' });
     if (post.userId !== req.userId) return res.status(403).json({ message: 'Unauthorized' });
+
     const updated = await prisma.post.update({
       where: { id: parseInt(req.params.id) },
       data: { content },
       include: {
-        user: { select: { id: true, name: true, department: true, batch: true } },
+        user: { select: { id: true, name: true, department: true, batch: true, avatar: true } },
+        images: true,
         _count: { select: { likes: true, comments: true } }
       }
     });
@@ -98,11 +153,11 @@ const getComments = async (req, res) => {
     const comments = await prisma.comment.findMany({
       where: { postId: parseInt(req.params.id), parentId: null },
       include: {
-        user: { select: { id: true, name: true, department: true, batch: true } },
+        user: { select: { id: true, name: true, department: true, batch: true, avatar: true } },
         reactions: true,
         replies: {
           include: {
-            user: { select: { id: true, name: true, department: true, batch: true } },
+            user: { select: { id: true, name: true, department: true, batch: true, avatar: true } },
             reactions: true,
           },
           orderBy: { createdAt: 'asc' }
@@ -127,7 +182,7 @@ const addComment = async (req, res) => {
         parentId: parentId ? parseInt(parentId) : null
       },
       include: {
-        user: { select: { id: true, name: true, department: true, batch: true } },
+        user: { select: { id: true, name: true, department: true, batch: true, avatar: true } },
         reactions: true,
         replies: []
       }
@@ -165,4 +220,8 @@ const reactToComment = async (req, res) => {
   }
 };
 
-module.exports = { createPost, getAllPosts, deletePost, editPost, toggleLike, getComments, addComment, reactToComment };
+module.exports = {
+  createPost, getAllPosts, deletePost, editPost,
+  toggleLike, getComments, addComment, reactToComment,
+  uploadMiddleware
+};

@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { createPost, getAllPosts, deletePost, editPost, toggleLike, getComments, addComment, reactToComment } = require('../controllers/postController');
+const { createPost, getAllPosts, deletePost, editPost, toggleLike, getComments, addComment, reactToComment, uploadMiddleware } = require('../controllers/postController');
 const authMiddleware = require('../middleware/authMiddleware');
 
-router.post('/', authMiddleware, createPost);
+router.post('/', authMiddleware, uploadMiddleware.array('images', 5), createPost);
 router.get('/', authMiddleware, getAllPosts);
 router.delete('/:id', authMiddleware, deletePost);
 router.put('/:id', authMiddleware, editPost);

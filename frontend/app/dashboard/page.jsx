@@ -3,13 +3,14 @@ import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ThumbsUp, MessageCircle, Share2, MoreVertical, Edit2, Trash2, Send, X, CornerDownRight } from 'lucide-react';
+import { ThumbsUp, MessageCircle, Share2, MoreVertical, Edit2, Trash2, Send, X, CornerDownRight, ImageIcon } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import Avatar from '../components/Avatar';
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
 
-function CommentItem({ comment, currentUser, postId, onReply, token, depth = 0 }) {
+function CommentItem({ comment, currentUser, postId, token, depth = 0 }) {
   const [showReactions, setShowReactions] = useState(false);
   const [reactions, setReactions] = useState(comment.reactions || []);
   const [replying, setReplying] = useState(false);
@@ -65,83 +66,66 @@ function CommentItem({ comment, currentUser, postId, onReply, token, depth = 0 }
   return (
     <div style={{marginLeft: depth > 0 ? '1.5rem' : 0}}>
       <div style={{display:'flex', gap:'0.5rem', alignItems:'flex-start'}}>
-        <div className="avatar" style={{width:'28px', height:'28px', fontSize:'0.7rem', flexShrink:0}}>
-          {comment.user?.name?.charAt(0).toUpperCase()}
-        </div>
+        <Avatar user={comment.user} size={28} radius="8px"/>
         <div style={{flex:1}}>
           <div style={{background:'rgba(255,255,255,0.04)', borderRadius:'8px', padding:'0.4rem 0.65rem'}}>
             <p style={{color:'#22c55e', fontSize:'0.72rem', fontWeight:600, marginBottom:'0.1rem'}}>{comment.user?.name}</p>
             <p style={{color:'rgba(255,255,255,0.75)', fontSize:'0.8rem', lineHeight:'1.4'}}>{comment.content}</p>
           </div>
 
-          {/* Reactions display */}
           {Object.keys(reactionCounts).length > 0 && (
             <div style={{display:'flex', gap:'0.25rem', marginTop:'0.2rem', flexWrap:'wrap'}}>
               {Object.entries(reactionCounts).map(([emoji, count]) => (
-                <span key={emoji} onClick={() => handleReact(emoji)} style={{background:'rgba(255,255,255,0.07)', borderRadius:'999px', padding:'1px 6px', fontSize:'0.72rem', cursor:'pointer', border: myReaction?.emoji === emoji ? '1px solid rgba(34,197,94,0.4)' : '1px solid transparent'}}>
+                <span key={emoji} onClick={() => handleReact(emoji)}
+                  style={{background:'rgba(255,255,255,0.07)', borderRadius:'999px', padding:'1px 6px', fontSize:'0.72rem', cursor:'pointer',
+                  border: myReaction?.emoji === emoji ? '1px solid rgba(34,197,94,0.4)' : '1px solid transparent'}}>
                   {emoji} {count}
                 </span>
               ))}
             </div>
           )}
 
-          {/* Actions */}
           <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginTop:'0.2rem'}}>
             <div style={{position:'relative'}}>
-              <button
-                onClick={() => setShowReactions(!showReactions)}
-                style={{background:'transparent', border:'none', color: myReaction ? '#22c55e' : 'rgba(255,255,255,0.3)', fontSize:'0.7rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.2rem', padding:'0.15rem 0.3rem', borderRadius:'4px'}}
-                onMouseEnter={e => e.currentTarget.style.color='#22c55e'}
-                onMouseLeave={e => { if(!myReaction) e.currentTarget.style.color='rgba(255,255,255,0.3)'; }}
-              >
+              <button onClick={() => setShowReactions(!showReactions)}
+                style={{background:'transparent', border:'none', color: myReaction ? '#22c55e' : 'rgba(255,255,255,0.3)', fontSize:'0.7rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.2rem', padding:'0.15rem 0.3rem', borderRadius:'4px'}}>
                 {myReaction ? myReaction.emoji : '👍'} React
               </button>
               {showReactions && (
                 <div style={{position:'absolute', bottom:'1.5rem', left:0, background:'#1e2d1e', border:'1px solid rgba(34,197,94,0.2)', borderRadius:'8px', padding:'0.35rem', display:'flex', gap:'0.25rem', zIndex:30, boxShadow:'0 4px 20px rgba(0,0,0,0.4)'}}>
                   {EMOJIS.map(emoji => (
-                    <button key={emoji} onClick={() => handleReact(emoji)} style={{background: myReaction?.emoji === emoji ? 'rgba(34,197,94,0.2)' : 'transparent', border:'none', cursor:'pointer', fontSize:'1rem', padding:'0.2rem', borderRadius:'4px', lineHeight:1}}>
+                    <button key={emoji} onClick={() => handleReact(emoji)}
+                      style={{background: myReaction?.emoji === emoji ? 'rgba(34,197,94,0.2)' : 'transparent', border:'none', cursor:'pointer', fontSize:'1rem', padding:'0.2rem', borderRadius:'4px', lineHeight:1}}>
                       {emoji}
                     </button>
                   ))}
                 </div>
               )}
             </div>
-
             {depth === 0 && (
-              <button
-                onClick={() => setReplying(!replying)}
-                style={{background:'transparent', border:'none', color:'rgba(255,255,255,0.3)', fontSize:'0.7rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.2rem', padding:'0.15rem 0.3rem', borderRadius:'4px'}}
-                onMouseEnter={e => e.currentTarget.style.color='#22c55e'}
-                onMouseLeave={e => e.currentTarget.style.color='rgba(255,255,255,0.3)'}
-              >
+              <button onClick={() => setReplying(!replying)}
+                style={{background:'transparent', border:'none', color:'rgba(255,255,255,0.3)', fontSize:'0.7rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.2rem', padding:'0.15rem 0.3rem', borderRadius:'4px'}}>
                 <CornerDownRight size={10}/> Reply
               </button>
             )}
             <span style={{color:'rgba(255,255,255,0.15)', fontSize:'0.65rem'}}>{new Date(comment.createdAt).toLocaleDateString()}</span>
           </div>
 
-          {/* Reply input */}
           {replying && (
             <form onSubmit={handleReply} style={{display:'flex', gap:'0.35rem', marginTop:'0.4rem'}}>
-              <input
-                type="text"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder={`Reply to ${comment.user?.name}...`}
-                className="input-field"
-                style={{fontSize:'0.75rem', padding:'0.3rem 0.6rem'}}
-                autoFocus
-              />
+              <input type="text" value={replyText} onChange={(e) => setReplyText(e.target.value)}
+                placeholder={`Reply to ${comment.user?.name}...`} className="input-field"
+                style={{fontSize:'0.75rem', padding:'0.3rem 0.6rem'}} autoFocus/>
               <button type="submit" disabled={replyLoading} className="btn-primary" style={{padding:'0.3rem 0.6rem', flexShrink:0}}>
                 <Send size={11}/>
               </button>
-              <button type="button" onClick={() => setReplying(false)} style={{background:'transparent', border:'none', color:'rgba(255,255,255,0.3)', cursor:'pointer', padding:'0.3rem'}}>
+              <button type="button" onClick={() => setReplying(false)}
+                style={{background:'transparent', border:'none', color:'rgba(255,255,255,0.3)', cursor:'pointer', padding:'0.3rem'}}>
                 <X size={13}/>
               </button>
             </form>
           )}
 
-          {/* Replies */}
           {replies.length > 0 && (
             <div style={{marginTop:'0.5rem', display:'flex', flexDirection:'column', gap:'0.4rem'}}>
               {replies.map(reply => (
@@ -160,6 +144,8 @@ export default function DashboardPage() {
   const [user, setUser] = useState(null);
   const [posts, setPosts] = useState([]);
   const [newPost, setNewPost] = useState('');
+  const [postImages, setPostImages] = useState([]);
+  const [imagePreview, setImagePreview] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeMenu, setActiveMenu] = useState(null);
   const [likedPosts, setLikedPosts] = useState({});
@@ -198,13 +184,31 @@ export default function DashboardPage() {
     if (userData) setUser(JSON.parse(userData));
   }, [router, fetchPosts]);
 
+  const handleImageSelect = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 5) { alert('Maximum 5 images allowed'); return; }
+    setPostImages(files);
+    setImagePreview(files.map(f => URL.createObjectURL(f)));
+  };
+
   const handlePost = async (e) => {
     e.preventDefault();
+    if (!newPost.trim() && postImages.length === 0) return;
+    const formData = new FormData();
+    formData.append('content', newPost);
+    formData.append('type', 'general');
+    postImages.forEach(img => formData.append('images', img));
     try {
-      const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/posts`, { content: newPost, type: 'general' }, { headers: { Authorization: `Bearer ${token}` } });
-      setPosts((prev) => [res.data.post, ...prev]);
+      const res = await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/posts`,
+        formData,
+        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } }
+      );
+      setPosts(prev => [res.data.post, ...prev]);
       setLikeCounts(prev => ({ ...prev, [res.data.post.id]: 0 }));
       setNewPost('');
+      setPostImages([]);
+      setImagePreview([]);
     } catch (err) { console.error(err); }
   };
 
@@ -212,7 +216,7 @@ export default function DashboardPage() {
     if (!confirm('Delete this post?')) return;
     try {
       await axios.delete(`${process.env.NEXT_PUBLIC_API_URL}/posts/${postId}`, { headers: { Authorization: `Bearer ${token}` } });
-      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      setPosts(prev => prev.filter(p => p.id !== postId));
       setActiveMenu(null);
     } catch (err) { console.error(err); }
   };
@@ -265,15 +269,13 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="page-bg" onClick={() => { activeMenu && setActiveMenu(null); }}>
-      <Navbar user={user} notifCount={0}/>
-
+    <div className="page-bg" onClick={() => activeMenu && setActiveMenu(null)}>
+      <Navbar user={user}/>
       <div className="center-wrap-sm" style={{flex:1, paddingTop:'1.25rem', paddingBottom:'2rem'}}>
+
         {/* Welcome */}
         <div className="post-card fade-in" style={{display:'flex', alignItems:'center', gap:'0.75rem', marginBottom:'0.65rem'}}>
-          <div className="avatar" style={{width:'40px', height:'40px', fontSize:'0.95rem'}}>
-            {user?.name?.charAt(0).toUpperCase()}
-          </div>
+          <Avatar user={user} size={42} radius="12px" onClick={() => router.push('/profile')}/>
           <div>
             <p style={{fontWeight:600, color:'white', fontSize:'0.9rem'}}>
               Welcome back, <span style={{color:'#22c55e'}}>{user?.name}</span>! 👋
@@ -287,10 +289,33 @@ export default function DashboardPage() {
         {/* Create Post */}
         <div className="post-card fade-in" style={{marginBottom:'0.65rem'}}>
           <form onSubmit={handlePost}>
-            <textarea value={newPost} onChange={(e) => setNewPost(e.target.value)}
-              placeholder="Share something with the community..."
-              className="input-field" style={{resize:'none', fontSize:'0.85rem'}} rows={3} required/>
-            <div style={{display:'flex', justifyContent:'flex-end', marginTop:'0.5rem'}}>
+            <div style={{display:'flex', gap:'0.65rem', marginBottom:'0.5rem'}}>
+              <Avatar user={user} size={34} radius="8px"/>
+              <textarea value={newPost} onChange={(e) => setNewPost(e.target.value)}
+                placeholder="Share something with the community..."
+                className="input-field" style={{resize:'none', fontSize:'0.85rem', flex:1}} rows={3}/>
+            </div>
+
+            {imagePreview.length > 0 && (
+              <div style={{display:'flex', gap:'0.5rem', flexWrap:'wrap', marginBottom:'0.5rem', paddingLeft:'3rem'}}>
+                {imagePreview.map((src, i) => (
+                  <div key={i} style={{position:'relative'}}>
+                    <img src={src} alt="" style={{width:'80px', height:'80px', objectFit:'cover', borderRadius:'8px', border:'1px solid rgba(34,197,94,0.3)'}}/>
+                    <button type="button" onClick={() => {
+                      setPostImages(prev => prev.filter((_, idx) => idx !== i));
+                      setImagePreview(prev => prev.filter((_, idx) => idx !== i));
+                    }} style={{position:'absolute', top:'-6px', right:'-6px', background:'#ef4444', border:'none', color:'white', borderRadius:'50%', width:'18px', height:'18px', cursor:'pointer', fontSize:'0.7rem', display:'flex', alignItems:'center', justifyContent:'center'}}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', paddingLeft:'3rem'}}>
+              <label style={{cursor:'pointer', display:'flex', alignItems:'center', gap:'0.4rem'}}>
+                <ImageIcon size={16} color="#22c55e"/>
+                <span style={{color:'rgba(255,255,255,0.45)', fontSize:'0.78rem'}}>Add Photos</span>
+                <input type="file" accept="image/*" multiple onChange={handleImageSelect} style={{display:'none'}}/>
+              </label>
               <button type="submit" className="btn-primary" style={{padding:'0.4rem 1.1rem', fontSize:'0.82rem'}}>Post</button>
             </div>
           </form>
@@ -303,11 +328,10 @@ export default function DashboardPage() {
           <>
             {posts.map((post) => (
               <div key={post.id} className="feed-card" style={{marginBottom:'0.65rem'}} onClick={(e) => e.stopPropagation()}>
-                {/* Post Header */}
                 <div style={{display:'flex', alignItems:'center', gap:'0.6rem', marginBottom:'0.6rem'}}>
-                  <div className="avatar" style={{width:'34px', height:'34px', fontSize:'0.82rem'}}>
-                    {post.user?.name?.charAt(0).toUpperCase()}
-                  </div>
+                  <Link href={`/users/${post.user?.id}`}>
+                    <Avatar user={post.user} size={36} radius="10px"/>
+                  </Link>
                   <div style={{flex:1, minWidth:0}}>
                     <Link href={`/users/${post.user?.id}`} style={{fontWeight:600, color:'white', fontSize:'0.85rem', textDecoration:'none'}}>
                       {post.user?.name}
@@ -319,8 +343,9 @@ export default function DashboardPage() {
                       <button onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === post.id ? null : post.id); }}
                         style={{background:'transparent', border:'none', color:'rgba(255,255,255,0.3)', cursor:'pointer', padding:'0.25rem', borderRadius:'6px', display:'flex', alignItems:'center'}}
                         onMouseEnter={e => e.currentTarget.style.color='#22c55e'}
-                        onMouseLeave={e => e.currentTarget.style.color='rgba(255,255,255,0.3)'}
-                      ><MoreVertical size={16}/></button>
+                        onMouseLeave={e => e.currentTarget.style.color='rgba(255,255,255,0.3)'}>
+                        <MoreVertical size={16}/>
+                      </button>
                       {activeMenu === post.id && (
                         <div className="dropdown-menu" style={{position:'absolute', right:0, top:'1.75rem', zIndex:20}}>
                           <button className="dropdown-item" onClick={() => { setEditingPost(post.id); setEditContent(post.content); setActiveMenu(null); }}>
@@ -335,7 +360,6 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* Post Content / Edit */}
                 {editingPost === post.id ? (
                   <div style={{marginBottom:'0.6rem'}}>
                     <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)}
@@ -350,10 +374,28 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ) : (
-                  <p style={{color:'rgba(255,255,255,0.82)', fontSize:'0.875rem', lineHeight:'1.6', marginBottom:'0.6rem'}}>{post.content}</p>
+                  <>
+                    {post.content && (
+                      <p style={{color:'rgba(255,255,255,0.82)', fontSize:'0.875rem', lineHeight:'1.6', marginBottom:'0.6rem'}}>{post.content}</p>
+                    )}
+                    {post.images && post.images.length > 0 && (
+                      <div style={{
+                        display:'grid',
+                        gridTemplateColumns: post.images.length === 1 ? '1fr' : post.images.length === 2 ? '1fr 1fr' : 'repeat(3, 1fr)',
+                        gap:'0.3rem', marginBottom:'0.6rem', borderRadius:'10px', overflow:'hidden'
+                      }}>
+                        {post.images.map((img, i) => (
+                          <img key={i} src={img.url} alt="" style={{
+                            width:'100%', aspectRatio: post.images.length === 1 ? '16/9' : '1/1',
+                            objectFit:'cover', cursor:'pointer',
+                            maxHeight: post.images.length === 1 ? '400px' : '200px'
+                          }} onClick={() => window.open(img.url, '_blank')}/>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
 
-                {/* Counts */}
                 {(likeCounts[post.id] > 0 || post._count?.comments > 0) && (
                   <div style={{display:'flex', gap:'0.75rem', marginBottom:'0.4rem', paddingBottom:'0.4rem', borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
                     {likeCounts[post.id] > 0 && (
@@ -369,7 +411,6 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {/* Action Buttons */}
                 <div style={{display:'flex', alignItems:'center', gap:'0.25rem'}}>
                   <button className={`btn-ghost ${likedPosts[post.id] ? 'active' : ''}`}
                     onClick={() => handleLike(post.id)}
@@ -386,10 +427,8 @@ export default function DashboardPage() {
                   </button>
                 </div>
 
-                {/* Comments Section */}
                 {commentOpen === post.id && (
                   <div style={{marginTop:'0.65rem', borderTop:'1px solid rgba(255,255,255,0.06)', paddingTop:'0.65rem'}}>
-                    {/* Comment List */}
                     <div style={{display:'flex', flexDirection:'column', gap:'0.6rem', marginBottom:'0.65rem', maxHeight:'300px', overflowY:'auto'}}>
                       {!comments[post.id] ? (
                         <p style={{color:'rgba(255,255,255,0.25)', fontSize:'0.78rem'}}>Loading...</p>
@@ -397,23 +436,12 @@ export default function DashboardPage() {
                         <p style={{color:'rgba(255,255,255,0.25)', fontSize:'0.78rem'}}>No comments yet. Be the first!</p>
                       ) : (
                         comments[post.id].map((comment) => (
-                          <CommentItem
-                            key={comment.id}
-                            comment={comment}
-                            currentUser={user}
-                            postId={post.id}
-                            token={token}
-                            depth={0}
-                          />
+                          <CommentItem key={comment.id} comment={comment} currentUser={user} postId={post.id} token={token} depth={0}/>
                         ))
                       )}
                     </div>
-
-                    {/* Add Comment */}
-                    <form onSubmit={(e) => handleComment(e, post.id)} style={{display:'flex', gap:'0.4rem'}}>
-                      <div className="avatar" style={{width:'28px', height:'28px', fontSize:'0.7rem', flexShrink:0}}>
-                        {user?.name?.charAt(0).toUpperCase()}
-                      </div>
+                    <form onSubmit={(e) => handleComment(e, post.id)} style={{display:'flex', gap:'0.4rem', alignItems:'center'}}>
+                      <Avatar user={user} size={28} radius="8px"/>
                       <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)}
                         placeholder="Write a comment..." className="input-field" style={{fontSize:'0.8rem', padding:'0.4rem 0.75rem'}}/>
                       <button type="submit" disabled={commentLoading} className="btn-primary" style={{padding:'0.4rem 0.65rem', flexShrink:0}}>
