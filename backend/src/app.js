@@ -9,14 +9,15 @@ const postRoutes = require('./routes/postRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const resourceRoutes = require('./routes/resourceRoutes');
+const marketRoutes = require('./routes/marketRoutes');
+const bloodRoutes = require('./routes/bloodRoutes');
 
 const app = express();
-const resourceRoutes = require('./routes/resourceRoutes');
 
-
-
-app.use(cors());
-app.use(express.json());
+app.use(cors({ origin: '*', methods: ['GET', 'POST', 'PUT', 'DELETE'], credentials: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan('dev'));
 
 app.use('/api/auth', authRoutes);
@@ -27,6 +28,9 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/resources', resourceRoutes);
+app.use('/api/market', marketRoutes);
+app.use('/api/blood', bloodRoutes);
+
 
 app.get('/', (req, res) => {
   res.json({ message: 'MentorBridge API is running!' });

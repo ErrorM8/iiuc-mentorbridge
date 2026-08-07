@@ -8,32 +8,41 @@ datasource db {
 }
 
 model User {
-  id         Int      @id @default(autoincrement())
-  name       String
-  email      String   @unique
-  password   String
-  studentId  String?
-  bloodGroup String?
-  gender     String?
-  batch      String?
-  department String?
-  role       String   @default("junior")
-  bio        String?
-  skills     String?
-  avatar     String?
-  createdAt  DateTime @default(now())
-
-  sentRequests         Connection[]       @relation("SentRequests")
-  receivedRequests     Connection[]       @relation("ReceivedRequests")
-  posts                Post[]
-  comments             Comment[]
-  likes                Like[]
-  commentReactions     CommentReaction[]
-  notifications        Notification[]     @relation("NotificationUser")
-  sentNotifications    Notification[]     @relation("NotificationSender")
-  sentMessages         Message[]          @relation("SentMessages")
-  receivedMessages     Message[]          @relation("ReceivedMessages")
-  resources            Resource[]
+  id                 Int               @id @default(autoincrement())
+  name               String
+  email              String            @unique
+  password           String
+  batch              String?
+  department         String?
+  role               String            @default("junior")
+  bio                String?
+  skills             String?
+  createdAt          DateTime          @default(now())
+  bloodGroup         String?
+  studentId          String?
+  gender             String?
+  avatar             String?
+  emailVerified      Boolean           @default(false)
+  resetExpiry        DateTime?
+  resetToken         String?
+  verificationExpiry DateTime?
+  verificationOTP    String?
+  googleId           String?           @unique
+  bloodDonor         BloodDonor?
+  bloodRequests      BloodRequest[]
+  buyRequests        BuyRequest[]
+  comments           Comment[]
+  commentReactions   CommentReaction[]
+  receivedRequests   Connection[]      @relation("ReceivedRequests")
+  sentRequests       Connection[]      @relation("SentRequests")
+  likes              Like[]
+  marketItems        MarketItem[]
+  receivedMessages   Message[]         @relation("ReceivedMessages")
+  sentMessages       Message[]         @relation("SentMessages")
+  sentNotifications  Notification[]    @relation("NotificationSender")
+  notifications      Notification[]    @relation("NotificationUser")
+  posts              Post[]
+  resources          Resource[]
 }
 
 model Connection {
@@ -42,22 +51,20 @@ model Connection {
   receiverId Int
   status     String   @default("pending")
   createdAt  DateTime @default(now())
-
-  sender   User @relation("SentRequests", fields: [senderId], references: [id])
-  receiver User @relation("ReceivedRequests", fields: [receiverId], references: [id])
+  receiver   User     @relation("ReceivedRequests", fields: [receiverId], references: [id])
+  sender     User     @relation("SentRequests", fields: [senderId], references: [id])
 }
 
 model Post {
-  id        Int      @id @default(autoincrement())
+  id        Int         @id @default(autoincrement())
   content   String?
-  type      String   @default("general")
+  type      String      @default("general")
   userId    Int
-  createdAt DateTime @default(now())
-
-  user     User        @relation(fields: [userId], references: [id])
-  comments Comment[]
-  likes    Like[]
-  images   PostImage[]
+  createdAt DateTime    @default(now())
+  comments  Comment[]
+  likes     Like[]
+  user      User        @relation(fields: [userId], references: [id])
+  images    PostImage[]
 }
 
 model PostImage {
@@ -68,17 +75,16 @@ model PostImage {
 }
 
 model Comment {
-  id        Int      @id @default(autoincrement())
+  id        Int               @id @default(autoincrement())
   content   String
   userId    Int
   postId    Int
+  createdAt DateTime          @default(now())
   parentId  Int?
-  createdAt DateTime @default(now())
-
-  user     User      @relation(fields: [userId], references: [id])
-  post     Post      @relation(fields: [postId], references: [id])
-  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
-  replies  Comment[] @relation("CommentReplies")
+  parent    Comment?          @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[]         @relation("CommentReplies")
+  post      Post              @relation(fields: [postId], references: [id])
+  user      User              @relation(fields: [userId], references: [id])
   reactions CommentReaction[]
 }
 
@@ -87,19 +93,18 @@ model CommentReaction {
   userId    Int
   commentId Int
   emoji     String
-
-  user    User    @relation(fields: [userId], references: [id])
-  comment Comment @relation(fields: [commentId], references: [id])
+  comment   Comment @relation(fields: [commentId], references: [id])
+  user      User    @relation(fields: [userId], references: [id])
 
   @@unique([userId, commentId])
 }
+
 model Like {
-  id     Int @id @default(autoincrement())
+  id     Int  @id @default(autoincrement())
   userId Int
   postId Int
-
-  user User @relation(fields: [userId], references: [id])
-  post Post @relation(fields: [postId], references: [id])
+  post   Post @relation(fields: [postId], references: [id])
+  user   User @relation(fields: [userId], references: [id])
 
   @@unique([userId, postId])
 }
@@ -112,29 +117,29 @@ model Notification {
   message   String
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
-
-  user   User @relation("NotificationUser", fields: [userId], references: [id])
-  sender User @relation("NotificationSender", fields: [senderId], references: [id])
+  metadata  String?
+  sender    User     @relation("NotificationSender", fields: [senderId], references: [id])
+  user      User     @relation("NotificationUser", fields: [userId], references: [id])
 }
 
 model Message {
   id         Int      @id @default(autoincrement())
-  content    String
+  content    String?
   senderId   Int
   receiverId Int
   read       Boolean  @default(false)
   createdAt  DateTime @default(now())
-
-  sender   User @relation("SentMessages", fields: [senderId], references: [id])
-  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  fileType   String?
+  fileUrl    String?
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
 }
 
 model Department {
   id        Int      @id @default(autoincrement())
   name      String   @unique
   createdAt DateTime @default(now())
-
-  courses Course[]
+  courses   Course[]
 }
 
 model Course {
@@ -143,24 +148,83 @@ model Course {
   name         String
   departmentId Int
   createdAt    DateTime   @default(now())
-
-  department Department @relation(fields: [departmentId], references: [id])
-  resources  Resource[]
+  department   Department @relation(fields: [departmentId], references: [id])
+  resources    Resource[]
 
   @@unique([code, departmentId])
 }
 
 model Resource {
-  id         Int      @id @default(autoincrement())
-  title      String
-  fileUrl    String
-  fileType   String
-  examType   String
-  aiSummary  String?
-  courseId   Int
-  userId     Int
-  createdAt  DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  title     String
+  fileUrl   String
+  fileType  String
+  examType  String
+  courseId  Int
+  userId    Int
+  createdAt DateTime @default(now())
+  aiSummary String?
+  course    Course   @relation(fields: [courseId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+}
 
-  course Course @relation(fields: [courseId], references: [id])
-  user   User   @relation(fields: [userId], references: [id])
+model MarketItem {
+  id          Int               @id @default(autoincrement())
+  title       String
+  description String
+  price       Float
+  condition   String
+  category    String
+  userId      Int
+  status      String            @default("available")
+  createdAt   DateTime          @default(now())
+  buyRequests BuyRequest[]
+  user        User              @relation(fields: [userId], references: [id])
+  images      MarketItemImage[]
+}
+
+model MarketItemImage {
+  id     Int        @id @default(autoincrement())
+  url    String
+  itemId Int
+  item   MarketItem @relation(fields: [itemId], references: [id])
+}
+
+model BuyRequest {
+  id        Int        @id @default(autoincrement())
+  itemId    Int
+  buyerId   Int
+  message   String?
+  status    String     @default("pending")
+  createdAt DateTime   @default(now())
+  buyer     User       @relation(fields: [buyerId], references: [id])
+  item      MarketItem @relation(fields: [itemId], references: [id])
+}
+
+model BloodRequest {
+  id          Int      @id @default(autoincrement())
+  bloodGroup  String
+  patientName String
+  hospital    String
+  location    String
+  contact     String
+  details     String?
+  urgent      Boolean  @default(false)
+  status      String   @default("active")
+  userId      Int
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model BloodDonor {
+  id               Int       @id @default(autoincrement())
+  bloodGroup       String
+  location         String
+  whatsapp         String
+  lastDonationDate DateTime?
+  available        Boolean   @default(true)
+  userId           Int       @unique
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id])
 }

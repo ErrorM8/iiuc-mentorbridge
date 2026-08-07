@@ -3,12 +3,147 @@ import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ThumbsUp, MessageCircle, Share2, MoreVertical, Edit2, Trash2, Send, X, CornerDownRight, ImageIcon } from 'lucide-react';
+import { ThumbsUp, MessageCircle, Share2, MoreVertical, Edit2, Trash2, Send, X, CornerDownRight, ImageIcon, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import Avatar from '../components/Avatar';
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+
+function Lightbox({ images, startIndex, onClose }) {
+  const [current, setCurrent] = useState(startIndex);
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight') setCurrent(p => p === images.length - 1 ? 0 : p + 1);
+      if (e.key === 'ArrowLeft') setCurrent(p => p === 0 ? images.length - 1 : p - 1);
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [images.length, onClose]);
+
+  return (
+    <div onClick={onClose} style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.93)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center'}}>
+      <button onClick={onClose} style={{position:'absolute', top:'1rem', right:'1rem', background:'rgba(255,255,255,0.1)', border:'none', color:'white', borderRadius:'50%', width:'40px', height:'40px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', zIndex:10}}>
+        <X size={20}/>
+      </button>
+      <img src={images[current].url} alt="full" onClick={e => e.stopPropagation()}
+        style={{maxWidth:'92vw', maxHeight:'88vh', objectFit:'contain', borderRadius:'8px'}}/>
+      {images.length > 1 && (
+        <>
+          <button onClick={e => { e.stopPropagation(); setCurrent(p => p === 0 ? images.length - 1 : p - 1); }}
+            style={{position:'absolute', left:'1rem', background:'rgba(0,0,0,0.6)', border:'none', color:'white', borderRadius:'50%', width:'40px', height:'40px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'}}>
+            <ChevronLeft size={20}/>
+          </button>
+          <button onClick={e => { e.stopPropagation(); setCurrent(p => p === images.length - 1 ? 0 : p + 1); }}
+            style={{position:'absolute', right:'1rem', background:'rgba(0,0,0,0.6)', border:'none', color:'white', borderRadius:'50%', width:'40px', height:'40px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'}}>
+            <ChevronRight size={20}/>
+          </button>
+          <div style={{position:'absolute', bottom:'1.5rem', left:'50%', transform:'translateX(-50%)', display:'flex', gap:'0.4rem'}}>
+            {images.map((_, i) => (
+              <button key={i} onClick={e => { e.stopPropagation(); setCurrent(i); }}
+                style={{width: i === current ? '22px' : '8px', height:'8px', borderRadius:'999px', background: i === current ? '#22c55e' : 'rgba(255,255,255,0.4)', border:'none', cursor:'pointer', padding:0, transition:'all 0.2s'}}/>
+            ))}
+          </div>
+          <span style={{position:'absolute', top:'1rem', left:'50%', transform:'translateX(-50%)', background:'rgba(0,0,0,0.6)', color:'white', borderRadius:'999px', padding:'3px 12px', fontSize:'0.78rem'}}>
+            {current + 1} / {images.length}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ImageCarousel({ images, onImageClick }) {
+  const [current, setCurrent] = useState(0);
+  if (!images || images.length === 0) return null;
+  return (
+    <div style={{position:'relative', marginBottom:'0.6rem', borderRadius:'10px', overflow:'hidden', background:'rgba(0,0,0,0.3)'}}>
+      <img src={images[current].url} alt="post"
+        style={{width:'100%', maxHeight:'420px', objectFit:'contain', display:'block', cursor:'zoom-in'}}
+        onClick={() => onImageClick(current)}/>
+      {images.length > 1 && (
+        <>
+          <button onClick={e => { e.stopPropagation(); setCurrent(p => p === 0 ? images.length - 1 : p - 1); }}
+            style={{position:'absolute', left:'0.5rem', top:'50%', transform:'translateY(-50%)', background:'rgba(0,0,0,0.6)', border:'none', color:'white', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'}}>
+            <ChevronLeft size={16}/>
+          </button>
+          <button onClick={e => { e.stopPropagation(); setCurrent(p => p === images.length - 1 ? 0 : p + 1); }}
+            style={{position:'absolute', right:'0.5rem', top:'50%', transform:'translateY(-50%)', background:'rgba(0,0,0,0.6)', border:'none', color:'white', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center'}}>
+            <ChevronRight size={16}/>
+          </button>
+          <div style={{position:'absolute', bottom:'0.65rem', left:'50%', transform:'translateX(-50%)', display:'flex', gap:'0.35rem'}}>
+            {images.map((_, i) => (
+              <button key={i} onClick={e => { e.stopPropagation(); setCurrent(i); }}
+                style={{width: i === current ? '20px' : '7px', height:'7px', borderRadius:'999px', background: i === current ? '#22c55e' : 'rgba(255,255,255,0.5)', border:'none', cursor:'pointer', padding:0, transition:'all 0.2s'}}/>
+            ))}
+          </div>
+          <div style={{position:'absolute', top:'0.65rem', right:'0.65rem', background:'rgba(0,0,0,0.6)', borderRadius:'999px', padding:'2px 8px', fontSize:'0.7rem', color:'white'}}>
+            {current + 1}/{images.length}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ShareModal({ post, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const shareText = `Check out this post on IIUC MentorBridge!\n\n"${post.content?.slice(0, 100)}${post.content?.length > 100 ? '...' : ''}"\n\nBy ${post.user?.name} • ${post.user?.department}\n\nVisit: ${typeof window !== 'undefined' ? window.location.origin : ''}/dashboard`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(shareText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200, padding:'1rem'}}>
+      <div className="glass-card" style={{width:'100%', maxWidth:'360px', padding:'1.5rem'}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+          <h3 style={{color:'#22c55e', fontWeight:700, fontSize:'0.95rem'}}>Share Post</h3>
+          <button onClick={onClose} style={{background:'transparent', border:'none', color:'rgba(255,255,255,0.5)', cursor:'pointer'}}><X size={18}/></button>
+        </div>
+        <div style={{background:'rgba(255,255,255,0.04)', borderRadius:'10px', padding:'0.75rem', marginBottom:'1rem', display:'flex', gap:'0.65rem', alignItems:'center'}}>
+          <Avatar user={post.user} size={38} radius="9px"/>
+          <div style={{flex:1, minWidth:0}}>
+            <p style={{color:'white', fontWeight:600, fontSize:'0.82rem'}}>{post.user?.name}</p>
+            <p style={{color:'rgba(255,255,255,0.45)', fontSize:'0.75rem', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+              {post.content?.slice(0, 60)}{post.content?.length > 60 ? '...' : ''}
+            </p>
+          </div>
+        </div>
+        <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
+          <button onClick={handleCopy} style={{display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.75rem 1rem', borderRadius:'10px', background: copied ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)', border:`1px solid ${copied ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.1)'}`, cursor:'pointer', width:'100%', textAlign:'left', transition:'all 0.2s'}}>
+            <div style={{width:'36px', height:'36px', borderRadius:'8px', background:'rgba(34,197,94,0.1)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>
+              {copied ? <Check size={18} color="#22c55e"/> : <Share2 size={18} color="#22c55e"/>}
+            </div>
+            <div>
+              <p style={{color:'white', fontSize:'0.85rem', fontWeight:500}}>{copied ? 'Copied!' : 'Copy Link'}</p>
+              <p style={{color:'rgba(255,255,255,0.35)', fontSize:'0.72rem'}}>Share via any platform</p>
+            </div>
+          </button>
+          <button onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank')}
+            style={{display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.75rem 1rem', borderRadius:'10px', background:'rgba(37,211,102,0.08)', border:'1px solid rgba(37,211,102,0.2)', cursor:'pointer', width:'100%', textAlign:'left'}}>
+            <div style={{width:'36px', height:'36px', borderRadius:'8px', background:'rgba(37,211,102,0.15)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:'1.1rem'}}>💬</div>
+            <div>
+              <p style={{color:'white', fontSize:'0.85rem', fontWeight:500}}>WhatsApp</p>
+              <p style={{color:'rgba(255,255,255,0.35)', fontSize:'0.72rem'}}>Share to WhatsApp</p>
+            </div>
+          </button>
+          <button onClick={() => window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin + '/dashboard' : '')}`, '_blank')}
+            style={{display:'flex', alignItems:'center', gap:'0.75rem', padding:'0.75rem 1rem', borderRadius:'10px', background:'rgba(24,119,242,0.08)', border:'1px solid rgba(24,119,242,0.2)', cursor:'pointer', width:'100%', textAlign:'left'}}>
+            <div style={{width:'36px', height:'36px', borderRadius:'8px', background:'rgba(24,119,242,0.15)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:'1.1rem'}}>📘</div>
+            <div>
+              <p style={{color:'white', fontSize:'0.85rem', fontWeight:500}}>Facebook</p>
+              <p style={{color:'rgba(255,255,255,0.35)', fontSize:'0.72rem'}}>Share to Facebook</p>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function CommentItem({ comment, currentUser, postId, token, depth = 0 }) {
   const [showReactions, setShowReactions] = useState(false);
@@ -23,23 +158,18 @@ function CommentItem({ comment, currentUser, postId, token, depth = 0 }) {
     reactions.forEach(r => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
     return counts;
   };
-
   const myReaction = reactions.find(r => r.userId === currentUser?.id);
 
   const handleReact = async (emoji) => {
     try {
       const res = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/posts/${postId}/comments/${comment.id}/react`,
-        { emoji },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { emoji }, { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data.removed) {
         setReactions(prev => prev.filter(r => r.userId !== currentUser?.id));
       } else {
-        setReactions(prev => {
-          const filtered = prev.filter(r => r.userId !== currentUser?.id);
-          return [...filtered, { userId: currentUser?.id, emoji, commentId: comment.id }];
-        });
+        setReactions(prev => [...prev.filter(r => r.userId !== currentUser?.id), { userId: currentUser?.id, emoji, commentId: comment.id }]);
       }
     } catch (err) { console.error(err); }
     setShowReactions(false);
@@ -72,19 +202,16 @@ function CommentItem({ comment, currentUser, postId, token, depth = 0 }) {
             <p style={{color:'#22c55e', fontSize:'0.72rem', fontWeight:600, marginBottom:'0.1rem'}}>{comment.user?.name}</p>
             <p style={{color:'rgba(255,255,255,0.75)', fontSize:'0.8rem', lineHeight:'1.4'}}>{comment.content}</p>
           </div>
-
           {Object.keys(reactionCounts).length > 0 && (
             <div style={{display:'flex', gap:'0.25rem', marginTop:'0.2rem', flexWrap:'wrap'}}>
               {Object.entries(reactionCounts).map(([emoji, count]) => (
                 <span key={emoji} onClick={() => handleReact(emoji)}
-                  style={{background:'rgba(255,255,255,0.07)', borderRadius:'999px', padding:'1px 6px', fontSize:'0.72rem', cursor:'pointer',
-                  border: myReaction?.emoji === emoji ? '1px solid rgba(34,197,94,0.4)' : '1px solid transparent'}}>
+                  style={{background:'rgba(255,255,255,0.07)', borderRadius:'999px', padding:'1px 6px', fontSize:'0.72rem', cursor:'pointer', border: myReaction?.emoji === emoji ? '1px solid rgba(34,197,94,0.4)' : '1px solid transparent'}}>
                   {emoji} {count}
                 </span>
               ))}
             </div>
           )}
-
           <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginTop:'0.2rem'}}>
             <div style={{position:'relative'}}>
               <button onClick={() => setShowReactions(!showReactions)}
@@ -110,10 +237,9 @@ function CommentItem({ comment, currentUser, postId, token, depth = 0 }) {
             )}
             <span style={{color:'rgba(255,255,255,0.15)', fontSize:'0.65rem'}}>{new Date(comment.createdAt).toLocaleDateString()}</span>
           </div>
-
           {replying && (
             <form onSubmit={handleReply} style={{display:'flex', gap:'0.35rem', marginTop:'0.4rem'}}>
-              <input type="text" value={replyText} onChange={(e) => setReplyText(e.target.value)}
+              <input type="text" value={replyText} onChange={e => setReplyText(e.target.value)}
                 placeholder={`Reply to ${comment.user?.name}...`} className="input-field"
                 style={{fontSize:'0.75rem', padding:'0.3rem 0.6rem'}} autoFocus/>
               <button type="submit" disabled={replyLoading} className="btn-primary" style={{padding:'0.3rem 0.6rem', flexShrink:0}}>
@@ -125,7 +251,6 @@ function CommentItem({ comment, currentUser, postId, token, depth = 0 }) {
               </button>
             </form>
           )}
-
           {replies.length > 0 && (
             <div style={{marginTop:'0.5rem', display:'flex', flexDirection:'column', gap:'0.4rem'}}>
               {replies.map(reply => (
@@ -157,6 +282,8 @@ export default function DashboardPage() {
   const [editingPost, setEditingPost] = useState(null);
   const [editContent, setEditContent] = useState('');
   const [token, setToken] = useState('');
+  const [sharePost, setSharePost] = useState(null);
+  const [lightbox, setLightbox] = useState(null);
 
   const fetchPosts = useCallback(async (tkn) => {
     try {
@@ -200,8 +327,7 @@ export default function DashboardPage() {
     postImages.forEach(img => formData.append('images', img));
     try {
       const res = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/posts`,
-        formData,
+        `${process.env.NEXT_PUBLIC_API_URL}/posts`, formData,
         { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } }
       );
       setPosts(prev => [res.data.post, ...prev]);
@@ -291,11 +417,10 @@ export default function DashboardPage() {
           <form onSubmit={handlePost}>
             <div style={{display:'flex', gap:'0.65rem', marginBottom:'0.5rem'}}>
               <Avatar user={user} size={34} radius="8px"/>
-              <textarea value={newPost} onChange={(e) => setNewPost(e.target.value)}
+              <textarea value={newPost} onChange={e => setNewPost(e.target.value)}
                 placeholder="Share something with the community..."
                 className="input-field" style={{resize:'none', fontSize:'0.85rem', flex:1}} rows={3}/>
             </div>
-
             {imagePreview.length > 0 && (
               <div style={{display:'flex', gap:'0.5rem', flexWrap:'wrap', marginBottom:'0.5rem', paddingLeft:'3rem'}}>
                 {imagePreview.map((src, i) => (
@@ -309,7 +434,6 @@ export default function DashboardPage() {
                 ))}
               </div>
             )}
-
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', paddingLeft:'3rem'}}>
               <label style={{cursor:'pointer', display:'flex', alignItems:'center', gap:'0.4rem'}}>
                 <ImageIcon size={16} color="#22c55e"/>
@@ -321,13 +445,14 @@ export default function DashboardPage() {
           </form>
         </div>
 
-        {/* Posts */}
+        {/* Posts Feed */}
         {posts.length === 0 ? (
           <p style={{textAlign:'center', color:'rgba(255,255,255,0.25)', padding:'2rem 0', fontSize:'0.85rem'}}>No posts yet. Be the first! 🚀</p>
         ) : (
           <>
             {posts.map((post) => (
-              <div key={post.id} className="feed-card" style={{marginBottom:'0.65rem'}} onClick={(e) => e.stopPropagation()}>
+              <div key={post.id} className="feed-card" style={{marginBottom:'0.65rem'}} onClick={e => e.stopPropagation()}>
+                {/* Post Header */}
                 <div style={{display:'flex', alignItems:'center', gap:'0.6rem', marginBottom:'0.6rem'}}>
                   <Link href={`/users/${post.user?.id}`}>
                     <Avatar user={post.user} size={36} radius="10px"/>
@@ -340,7 +465,7 @@ export default function DashboardPage() {
                   </div>
                   {post.userId === user?.id && (
                     <div style={{position:'relative', flexShrink:0}}>
-                      <button onClick={(e) => { e.stopPropagation(); setActiveMenu(activeMenu === post.id ? null : post.id); }}
+                      <button onClick={e => { e.stopPropagation(); setActiveMenu(activeMenu === post.id ? null : post.id); }}
                         style={{background:'transparent', border:'none', color:'rgba(255,255,255,0.3)', cursor:'pointer', padding:'0.25rem', borderRadius:'6px', display:'flex', alignItems:'center'}}
                         onMouseEnter={e => e.currentTarget.style.color='#22c55e'}
                         onMouseLeave={e => e.currentTarget.style.color='rgba(255,255,255,0.3)'}>
@@ -360,9 +485,10 @@ export default function DashboardPage() {
                   )}
                 </div>
 
+                {/* Post Content */}
                 {editingPost === post.id ? (
                   <div style={{marginBottom:'0.6rem'}}>
-                    <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)}
+                    <textarea value={editContent} onChange={e => setEditContent(e.target.value)}
                       className="input-field" style={{resize:'none', fontSize:'0.85rem', marginBottom:'0.4rem'}} rows={3} autoFocus/>
                     <div style={{display:'flex', gap:'0.4rem'}}>
                       <button onClick={() => handleEditPost(post.id)} className="btn-primary" style={{padding:'0.35rem 0.75rem', fontSize:'0.78rem'}}>
@@ -376,26 +502,20 @@ export default function DashboardPage() {
                 ) : (
                   <>
                     {post.content && (
-                      <p style={{color:'rgba(255,255,255,0.82)', fontSize:'0.875rem', lineHeight:'1.6', marginBottom:'0.6rem'}}>{post.content}</p>
+                      <p style={{color:'rgba(255,255,255,0.82)', fontSize:'0.875rem', lineHeight:'1.6', marginBottom: post.images?.length > 0 ? '0.5rem' : '0.6rem'}}>
+                        {post.content}
+                      </p>
                     )}
                     {post.images && post.images.length > 0 && (
-                      <div style={{
-                        display:'grid',
-                        gridTemplateColumns: post.images.length === 1 ? '1fr' : post.images.length === 2 ? '1fr 1fr' : 'repeat(3, 1fr)',
-                        gap:'0.3rem', marginBottom:'0.6rem', borderRadius:'10px', overflow:'hidden'
-                      }}>
-                        {post.images.map((img, i) => (
-                          <img key={i} src={img.url} alt="" style={{
-                            width:'100%', aspectRatio: post.images.length === 1 ? '16/9' : '1/1',
-                            objectFit:'cover', cursor:'pointer',
-                            maxHeight: post.images.length === 1 ? '400px' : '200px'
-                          }} onClick={() => window.open(img.url, '_blank')}/>
-                        ))}
-                      </div>
+                      <ImageCarousel
+                        images={post.images}
+                        onImageClick={(idx) => setLightbox({ images: post.images, index: idx })}
+                      />
                     )}
                   </>
                 )}
 
+                {/* Counts */}
                 {(likeCounts[post.id] > 0 || post._count?.comments > 0) && (
                   <div style={{display:'flex', gap:'0.75rem', marginBottom:'0.4rem', paddingBottom:'0.4rem', borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
                     {likeCounts[post.id] > 0 && (
@@ -411,6 +531,7 @@ export default function DashboardPage() {
                   </div>
                 )}
 
+                {/* Actions */}
                 <div style={{display:'flex', alignItems:'center', gap:'0.25rem'}}>
                   <button className={`btn-ghost ${likedPosts[post.id] ? 'active' : ''}`}
                     onClick={() => handleLike(post.id)}
@@ -421,12 +542,12 @@ export default function DashboardPage() {
                     style={{color: commentOpen === post.id ? '#60a5fa' : undefined, fontSize:'0.78rem'}}>
                     <MessageCircle size={13}/> Comment
                   </button>
-                  <button className="btn-ghost" style={{fontSize:'0.78rem'}}
-                    onClick={() => { navigator.clipboard.writeText(window.location.origin + '/users/' + post.user?.id); alert('Link copied!'); }}>
+                  <button className="btn-ghost" style={{fontSize:'0.78rem'}} onClick={() => setSharePost(post)}>
                     <Share2 size={13}/> Share
                   </button>
                 </div>
 
+                {/* Comments */}
                 {commentOpen === post.id && (
                   <div style={{marginTop:'0.65rem', borderTop:'1px solid rgba(255,255,255,0.06)', paddingTop:'0.65rem'}}>
                     <div style={{display:'flex', flexDirection:'column', gap:'0.6rem', marginBottom:'0.65rem', maxHeight:'300px', overflowY:'auto'}}>
@@ -435,14 +556,14 @@ export default function DashboardPage() {
                       ) : comments[post.id].length === 0 ? (
                         <p style={{color:'rgba(255,255,255,0.25)', fontSize:'0.78rem'}}>No comments yet. Be the first!</p>
                       ) : (
-                        comments[post.id].map((comment) => (
+                        comments[post.id].map(comment => (
                           <CommentItem key={comment.id} comment={comment} currentUser={user} postId={post.id} token={token} depth={0}/>
                         ))
                       )}
                     </div>
-                    <form onSubmit={(e) => handleComment(e, post.id)} style={{display:'flex', gap:'0.4rem', alignItems:'center'}}>
+                    <form onSubmit={e => handleComment(e, post.id)} style={{display:'flex', gap:'0.4rem', alignItems:'center'}}>
                       <Avatar user={user} size={28} radius="8px"/>
-                      <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)}
+                      <input type="text" value={newComment} onChange={e => setNewComment(e.target.value)}
                         placeholder="Write a comment..." className="input-field" style={{fontSize:'0.8rem', padding:'0.4rem 0.75rem'}}/>
                       <button type="submit" disabled={commentLoading} className="btn-primary" style={{padding:'0.4rem 0.65rem', flexShrink:0}}>
                         <Send size={13}/>
@@ -458,6 +579,10 @@ export default function DashboardPage() {
           </>
         )}
       </div>
+
+      {sharePost && <ShareModal post={sharePost} onClose={() => setSharePost(null)}/>}
+      {lightbox && <Lightbox images={lightbox.images} startIndex={lightbox.index} onClose={() => setLightbox(null)}/>}
+
       <Footer/>
     </div>
   );

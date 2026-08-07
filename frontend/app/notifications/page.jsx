@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
-import { Bell, UserCheck, UserX, CheckCheck, Check, Heart } from 'lucide-react';
+import { Bell, UserCheck, UserX, CheckCheck, Check, Heart, ShoppingBag, Droplets } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import Avatar from '../components/Avatar';
@@ -42,32 +42,21 @@ export default function NotificationsPage() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setActionDone(prev => ({ ...prev, [connectionId]: status }));
-      const notifRes = await axios.get(
-        `${process.env.NEXT_PUBLIC_API_URL}/notifications`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const notifRes = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/notifications`, { headers: { Authorization: `Bearer ${token}` } });
       setNotifications(notifRes.data);
     } catch (err) { console.error(err); }
   };
 
   const markRead = async (id) => {
     try {
-      await axios.put(
-        `${process.env.NEXT_PUBLIC_API_URL}/notifications/${id}/read`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/notifications/${id}/read`, {}, { headers: { Authorization: `Bearer ${token}` } });
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
     } catch (err) { console.error(err); }
   };
 
   const markAllRead = async () => {
     try {
-      await axios.put(
-        `${process.env.NEXT_PUBLIC_API_URL}/notifications/mark-all-read`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/notifications/mark-all-read`, {}, { headers: { Authorization: `Bearer ${token}` } });
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     } catch (err) { console.error(err); }
   };
@@ -77,6 +66,12 @@ export default function NotificationsPage() {
     if (notif.type === 'connection_accepted' || notif.type === 'connection_request') {
       if (notif.sender?.id) router.push(`/users/${notif.sender.id}`);
     }
+    if (notif.type === 'buy_request') {
+      router.push('/market');
+    }
+    if (notif.type === 'blood_request') {
+      router.push('/blood');
+    }
   };
 
   const pendingCount = requests.filter(r => !actionDone[r.id]).length;
@@ -84,10 +79,12 @@ export default function NotificationsPage() {
   const totalUnread = pendingCount + unreadNotifCount;
 
   const getNotifStyle = (type) => {
-    if (type === 'connection_request') return { color: '#22c55e', icon: UserCheck };
-    if (type === 'connection_accepted') return { color: '#60a5fa', icon: UserCheck };
-    if (type === 'like') return { color: '#f87171', icon: Heart };
-    return { color: '#a78bfa', icon: Bell };
+    if (type === 'connection_request') return { color:'#22c55e', icon:UserCheck };
+    if (type === 'connection_accepted') return { color:'#60a5fa', icon:UserCheck };
+    if (type === 'like') return { color:'#f87171', icon:Heart };
+    if (type === 'buy_request') return { color:'#f59e0b', icon:ShoppingBag };
+    if (type === 'blood_request') return { color:'#ef4444', icon:Droplets };
+    return { color:'#a78bfa', icon:Bell };
   };
 
   if (loading) return (
@@ -101,6 +98,7 @@ export default function NotificationsPage() {
       <Navbar user={user}/>
       <div className="center-wrap-sm" style={{flex:1, paddingTop:'1.25rem', paddingBottom:'2rem'}}>
 
+        {/* Header */}
         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
           <div style={{display:'flex', alignItems:'center', gap:'0.5rem'}}>
             <h2 className="heading-text" style={{fontSize:'1.2rem'}}>Notifications</h2>
@@ -183,6 +181,16 @@ export default function NotificationsPage() {
                       <p style={{color:'rgba(255,255,255,0.25)', fontSize:'0.7rem', marginTop:'0.15rem'}}>
                         {new Date(notif.createdAt).toLocaleDateString()} • {new Date(notif.createdAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                       </p>
+                      {notif.type === 'blood_request' && (
+                        <span style={{color:'#ef4444', fontSize:'0.7rem', display:'flex', alignItems:'center', gap:'0.2rem', marginTop:'0.15rem'}}>
+                          <Droplets size={10}/> Click to view blood request
+                        </span>
+                      )}
+                      {notif.type === 'buy_request' && (
+                        <span style={{color:'#f59e0b', fontSize:'0.7rem', display:'flex', alignItems:'center', gap:'0.2rem', marginTop:'0.15rem'}}>
+                          <ShoppingBag size={10}/> Click to view in Market
+                        </span>
+                      )}
                     </div>
                     {!notif.read && <div style={{width:'7px', height:'7px', borderRadius:'50%', background:'#22c55e', flexShrink:0}}/>}
                     {notif.read && <Check size={13} color="rgba(255,255,255,0.2)" style={{flexShrink:0}}/>}
@@ -193,6 +201,7 @@ export default function NotificationsPage() {
           </div>
         )}
 
+        {/* Empty */}
         {requests.length === 0 && notifications.length === 0 && (
           <div style={{textAlign:'center', padding:'3rem 1rem'}}>
             <Bell size={40} style={{margin:'0 auto 0.75rem', display:'block', color:'rgba(255,255,255,0.15)'}}/>
