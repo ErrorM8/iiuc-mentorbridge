@@ -1,229 +1,401 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
 import axios from 'axios';
-import { UserPlus, UserCheck, UserX, MapPin, BookOpen, Droplets, ThumbsUp, MessageCircle, MessageSquare } from 'lucide-react';
-import Navbar from '../../components/Navbar';
+import { useRouter, useParams } from 'next/navigation';
+import Link from 'next/link';
+import {
+  UserPlus, UserCheck, UserX, MessageSquare, Droplets,
+  BookOpen, MapPin, ThumbsUp, MessageCircle, ChevronLeft,
+  ChevronRight, X, Send, MoreVertical, Trash2
+} from 'lucide-react';
+import Sidebar from '../../components/Sidebar';
 import Footer from '../../components/Footer';
 import Avatar from '../../components/Avatar';
 
+function ImageCarousel({ images, onImageClick }) {
+  const [current, setCurrent] = useState(0);
+  if (!images || images.length === 0) return null;
+  return (
+    <div style={{position:'relative',borderRadius:'10px',overflow:'hidden',background:'rgba(0,0,0,0.3)',marginBottom:'0.5rem'}}>
+      <img src={images[current].url} alt="" style={{width:'100%',maxHeight:'320px',objectFit:'contain',display:'block',cursor:'zoom-in'}} onClick={()=>onImageClick?.(current)}/>
+      {images.length > 1 && (
+        <>
+          <button onClick={e=>{e.stopPropagation();setCurrent(p=>(p-1+images.length)%images.length);}} style={{position:'absolute',left:'0.5rem',top:'50%',transform:'translateY(-50%)',background:'rgba(0,0,0,0.6)',border:'none',color:'white',borderRadius:'50%',width:'28px',height:'28px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><ChevronLeft size={14}/></button>
+          <button onClick={e=>{e.stopPropagation();setCurrent(p=>(p+1)%images.length);}} style={{position:'absolute',right:'0.5rem',top:'50%',transform:'translateY(-50%)',background:'rgba(0,0,0,0.6)',border:'none',color:'white',borderRadius:'50%',width:'28px',height:'28px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><ChevronRight size={14}/></button>
+          <div style={{position:'absolute',bottom:'0.4rem',left:'50%',transform:'translateX(-50%)',display:'flex',gap:'0.25rem'}}>
+            {images.map((_,i)=>(
+              <button key={i} onClick={e=>{e.stopPropagation();setCurrent(i);}} style={{width:i===current?'16px':'5px',height:'5px',borderRadius:'999px',background:i===current?'#22c55e':'rgba(255,255,255,0.5)',border:'none',cursor:'pointer',padding:0,transition:'all 0.2s'}}/>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Lightbox({ images, startIndex, onClose }) {
+  const [current, setCurrent] = useState(startIndex);
+  useEffect(() => {
+    const fn = (e) => {
+      if (e.key==='Escape') onClose();
+      if (e.key==='ArrowRight') setCurrent(p=>(p+1)%images.length);
+      if (e.key==='ArrowLeft') setCurrent(p=>(p-1+images.length)%images.length);
+    };
+    window.addEventListener('keydown', fn);
+    return () => window.removeEventListener('keydown', fn);
+  }, [images.length, onClose]);
+  return (
+    <div onClick={onClose} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.96)',zIndex:2000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <button onClick={onClose} style={{position:'absolute',top:'1rem',right:'1rem',background:'rgba(255,255,255,0.1)',border:'none',color:'white',borderRadius:'50%',width:'38px',height:'38px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><X size={18}/></button>
+      <img src={images[current].url} alt="" onClick={e=>e.stopPropagation()} style={{maxWidth:'92vw',maxHeight:'88vh',objectFit:'contain',borderRadius:'10px'}}/>
+      {images.length > 1 && (
+        <>
+          <button onClick={e=>{e.stopPropagation();setCurrent(p=>(p-1+images.length)%images.length);}} style={{position:'absolute',left:'1rem',background:'rgba(0,0,0,0.6)',border:'none',color:'white',borderRadius:'50%',width:'40px',height:'40px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><ChevronLeft size={20}/></button>
+          <button onClick={e=>{e.stopPropagation();setCurrent(p=>(p+1)%images.length);}} style={{position:'absolute',right:'1rem',background:'rgba(0,0,0,0.6)',border:'none',color:'white',borderRadius:'50%',width:'40px',height:'40px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center'}}><ChevronRight size={20}/></button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function UserProfilePage() {
-  const { id } = useParams();
   const router = useRouter();
-  const [profile, setProfile] = useState(null);
+  const params = useParams();
+  const userId = params?.id;
+
+  const [currentUser, setCurrentUser] = useState(null);
+  const [profileUser, setProfileUser] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [connectionStatus, setConnectionStatus] = useState('none');
-  const [connectionId, setConnectionId] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [actionLoading, setActionLoading] = useState(false);
   const [token, setToken] = useState('');
+  const [connStatus, setConnStatus] = useState({ status: 'none' });
+  const [connLoading, setConnLoading] = useState(false);
+  const [connections, setConnections] = useState([]);
+  const [likedPosts, setLikedPosts] = useState({});
+  const [likeCounts, setLikeCounts] = useState({});
+  const [commentOpen, setCommentOpen] = useState(null);
+  const [comments, setComments] = useState({});
+  const [newComment, setNewComment] = useState({});
+  const [lightbox, setLightbox] = useState(null);
 
-  const fetchProfile = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     const tkn = localStorage.getItem('token');
     const userData = localStorage.getItem('user');
-    if (!tkn) { router.push('/login'); return; }
+    if (!tkn || !userId) { router.push('/login'); return; }
     setToken(tkn);
-    if (userData) setCurrentUser(JSON.parse(userData));
-    try {
-      const [userRes, postsRes, statusRes] = await Promise.all([
-        axios.get(`${process.env.NEXT_PUBLIC_API_URL}/users/${id}`, { headers: { Authorization: `Bearer ${tkn}` } }),
-        axios.get(`${process.env.NEXT_PUBLIC_API_URL}/posts`, { headers: { Authorization: `Bearer ${tkn}` } }),
-        axios.get(`${process.env.NEXT_PUBLIC_API_URL}/connections/status/${id}`, { headers: { Authorization: `Bearer ${tkn}` } })
-      ]);
-      setProfile(userRes.data);
-      setPosts(postsRes.data.posts.filter(p => p.userId === parseInt(id)));
-      setConnectionStatus(statusRes.data.status);
-      setConnectionId(statusRes.data.connectionId);
-    } catch (err) { console.error(err); } finally { setLoading(false); }
-  }, [id, router]);
+    const me = JSON.parse(userData || '{}');
+    setCurrentUser(me);
 
-  useEffect(() => { fetchProfile(); }, [fetchProfile]);
+    // Redirect to own profile
+    if (parseInt(userId) === me.id) { router.push('/profile'); return; }
+
+    try {
+      const [userRes, postsRes, statusRes, connRes] = await Promise.all([
+        axios.get(`${process.env.NEXT_PUBLIC_API_URL}/users/${userId}`, { headers: { Authorization: `Bearer ${tkn}` } }),
+        axios.get(`${process.env.NEXT_PUBLIC_API_URL}/posts`, { headers: { Authorization: `Bearer ${tkn}` } }),
+        axios.get(`${process.env.NEXT_PUBLIC_API_URL}/connections/status/${userId}`, { headers: { Authorization: `Bearer ${tkn}` } }),
+        axios.get(`${process.env.NEXT_PUBLIC_API_URL}/connections/my`, { headers: { Authorization: `Bearer ${tkn}` } }),
+      ]);
+
+      setProfileUser(userRes.data);
+      setConnStatus(statusRes.data);
+      setConnections(connRes.data);
+
+      const userPosts = postsRes.data.posts.filter(p => p.userId === parseInt(userId));
+      setPosts(userPosts);
+
+      const liked = {};
+      const counts = {};
+      userPosts.forEach(p => {
+        counts[p.id] = p._count?.likes || 0;
+        liked[p.id] = p.likes?.some(l => l.userId === me.id) || false;
+      });
+      setLikeCounts(counts);
+      setLikedPosts(liked);
+    } catch (err) {
+      console.error(err);
+      if (err.response?.status === 404) router.push('/users');
+    } finally { setLoading(false); }
+  }, [userId, router]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const handleConnect = async () => {
-    setActionLoading(true);
+    setConnLoading(true);
     try {
-      const res = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/connections/send`,
-        { receiverId: id },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setConnectionStatus('sent');
-      setConnectionId(res.data.connection.id);
-    } catch (err) { alert(err.response?.data?.message || 'Something went wrong'); }
-    finally { setActionLoading(false); }
+      const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/connections/send`, { receiverId: parseInt(userId) }, { headers: { Authorization: `Bearer ${token}` } });
+      setConnStatus({ status: 'sent', connectionId: res.data.connection.id });
+    } catch (err) { alert(err.response?.data?.message || 'Error'); } finally { setConnLoading(false); }
+  };
+
+  const handleCancel = async () => {
+    setConnLoading(true);
+    try {
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/connections/cancel`, { receiverId: parseInt(userId) }, { headers: { Authorization: `Bearer ${token}` } });
+      setConnStatus({ status: 'none' });
+    } catch (err) { console.error(err); } finally { setConnLoading(false); }
   };
 
   const handleDisconnect = async () => {
-    if (!confirm('Are you sure you want to disconnect?')) return;
-    setActionLoading(true);
+    if (!confirm('Disconnect?')) return;
+    setConnLoading(true);
     try {
-      await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/connections/disconnect`,
-        { userId: id },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      setConnectionStatus('none');
-      setConnectionId(null);
-    } catch (err) { console.error(err); } finally { setActionLoading(false); }
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/connections/disconnect`, { userId: parseInt(userId) }, { headers: { Authorization: `Bearer ${token}` } });
+      setConnStatus({ status: 'none' });
+    } catch (err) { console.error(err); } finally { setConnLoading(false); }
+  };
+
+  const handleLike = async (postId) => {
+    try {
+      const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/posts/${postId}/like`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      setLikedPosts(prev => ({ ...prev, [postId]: res.data.liked }));
+      setLikeCounts(prev => ({ ...prev, [postId]: res.data.count }));
+    } catch (err) { console.error(err); }
+  };
+
+  const openComments = async (postId) => {
+    if (commentOpen === postId) { setCommentOpen(null); return; }
+    setCommentOpen(postId);
+    if (comments[postId]) return;
+    try {
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/posts/${postId}/comments`, { headers: { Authorization: `Bearer ${token}` } });
+      setComments(prev => ({ ...prev, [postId]: res.data }));
+    } catch (err) { console.error(err); }
+  };
+
+  const handleComment = async (e, postId) => {
+    e.preventDefault();
+    if (!newComment[postId]?.trim()) return;
+    try {
+      const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/posts/${postId}/comments`, { content: newComment[postId] }, { headers: { Authorization: `Bearer ${token}` } });
+      setComments(prev => ({ ...prev, [postId]: [...(prev[postId] || []), { ...res.data, replies: [] }] }));
+      setNewComment(prev => ({ ...prev, [postId]: '' }));
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, _count: { ...p._count, comments: (p._count?.comments || 0) + 1 } } : p));
+    } catch (err) { console.error(err); }
   };
 
   const ConnectButton = () => {
-    const handleAccept = async () => {
-      setActionLoading(true);
-      try {
-        await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/connections/${connectionId}`, { status: 'accepted' }, { headers: { Authorization: `Bearer ${token}` } });
-        setConnectionStatus('connected');
-      } catch (err) { console.error(err); } finally { setActionLoading(false); }
-    };
-
-    const handleDecline = async () => {
-      setActionLoading(true);
-      try {
-        await axios.put(`${process.env.NEXT_PUBLIC_API_URL}/connections/${connectionId}`, { status: 'rejected' }, { headers: { Authorization: `Bearer ${token}` } });
-        setConnectionStatus('none');
-        setConnectionId(null);
-      } catch (err) { console.error(err); } finally { setActionLoading(false); }
-    };
-
-    const handleCancel = async () => {
-      if (!confirm('Cancel connection request?')) return;
-      setActionLoading(true);
-      try {
-        await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/connections/cancel`, { receiverId: id }, { headers: { Authorization: `Bearer ${token}` } });
-        setConnectionStatus('none');
-        setConnectionId(null);
-      } catch (err) { console.error(err); } finally { setActionLoading(false); }
-    };
-
-    if (connectionStatus === 'none') return (
-      <button onClick={handleConnect} disabled={actionLoading} className="btn-primary" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem', flexShrink:0}}>
-        <UserPlus size={13}/> {actionLoading ? '...' : 'Connect'}
+    const { status } = connStatus;
+    if (status === 'connected') return (
+      <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
+        <button onClick={()=>router.push(`/messages?userId=${userId}&userName=${encodeURIComponent(profileUser?.name)}`)}
+          className="btn-primary" style={{padding:'0.5rem 1.25rem',fontSize:'0.85rem',display:'flex',alignItems:'center',gap:'0.4rem'}}>
+          <MessageSquare size={15}/> Message
+        </button>
+        <button onClick={handleDisconnect} disabled={connLoading} className="btn-outline"
+          style={{padding:'0.5rem 1rem',fontSize:'0.85rem',display:'flex',alignItems:'center',gap:'0.4rem',color:'rgba(239,68,68,0.7)',borderColor:'rgba(239,68,68,0.3)'}}>
+          <UserX size={15}/> Disconnect
+        </button>
+      </div>
+    );
+    if (status === 'sent') return (
+      <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'0.4rem',padding:'0.5rem 1rem',background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.12)',borderRadius:'8px',fontSize:'0.85rem',color:'var(--text2)'}}>
+          <UserCheck size={15}/> Request Sent
+        </div>
+        <button onClick={handleCancel} disabled={connLoading} className="btn-outline" style={{padding:'0.5rem 1rem',fontSize:'0.85rem'}}>
+          Cancel
+        </button>
+      </div>
+    );
+    if (status === 'received') return (
+      <button onClick={()=>router.push('/notifications')} className="btn-primary"
+        style={{padding:'0.5rem 1.25rem',fontSize:'0.85rem',display:'flex',alignItems:'center',gap:'0.4rem'}}>
+        <UserCheck size={15}/> Respond to Request
       </button>
     );
-
-    if (connectionStatus === 'sent') return (
-      <div style={{display:'flex', gap:'0.4rem', alignItems:'center', flexShrink:0}}>
-        <span style={{color:'rgba(255,255,255,0.5)', fontSize:'0.78rem', display:'flex', alignItems:'center', gap:'0.25rem'}}>
-          <UserCheck size={13}/> Request Sent
-        </span>
-        <button onClick={handleCancel} disabled={actionLoading} className="btn-danger" style={{padding:'0.35rem 0.65rem', fontSize:'0.75rem'}}>
-          {actionLoading ? '...' : 'Cancel'}
-        </button>
-      </div>
+    return (
+      <button onClick={handleConnect} disabled={connLoading} className="btn-primary"
+        style={{padding:'0.5rem 1.25rem',fontSize:'0.85rem',display:'flex',alignItems:'center',gap:'0.4rem'}}>
+        <UserPlus size={15}/> {connLoading ? 'Connecting...' : 'Connect'}
+      </button>
     );
-
-    if (connectionStatus === 'received') return (
-      <div style={{display:'flex', gap:'0.4rem', flexShrink:0}}>
-        <button onClick={handleAccept} disabled={actionLoading} className="btn-primary" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem'}}>
-          <UserCheck size={13}/> {actionLoading ? '...' : 'Accept'}
-        </button>
-        <button onClick={handleDecline} disabled={actionLoading} className="btn-danger" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem'}}>
-          <UserX size={13}/> {actionLoading ? '...' : 'Decline'}
-        </button>
-      </div>
-    );
-
-    if (connectionStatus === 'connected') return (
-      <div style={{display:'flex', gap:'0.4rem', flexShrink:0, alignItems:'center'}}>
-        <button onClick={() => router.push(`/messages?userId=${id}&userName=${profile?.name}`)} className="btn-primary" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem'}}>
-          <MessageSquare size={13}/> Message
-        </button>
-        <button onClick={handleDisconnect} disabled={actionLoading} className="btn-danger" style={{padding:'0.45rem 0.875rem', fontSize:'0.8rem'}}>
-          <UserX size={12}/> {actionLoading ? '...' : 'Disconnect'}
-        </button>
-      </div>
-    );
-    return null;
   };
 
   if (loading) return (
-    <div className="page-bg" style={{display:'flex', alignItems:'center', justifyContent:'center'}}>
-      <p style={{color:'#22c55e', fontWeight:600}}>Loading...</p>
+    <div className="page-bg" style={{display:'flex',alignItems:'center',justifyContent:'center'}}>
+      <div style={{width:'44px',height:'44px',border:'3px solid rgba(34,197,94,0.2)',borderTop:'3px solid #22c55e',borderRadius:'50%',animation:'spin 0.8s linear infinite'}}/>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 
-  const isOwnProfile = currentUser?.id === parseInt(id);
+  if (!profileUser) return null;
 
   return (
     <div className="page-bg">
-      <Navbar user={currentUser}/>
-      <div className="center-wrap-sm" style={{flex:1, paddingTop:'1.25rem', paddingBottom:'2rem'}}>
+      <Sidebar user={currentUser}/>
+      <div className="main-with-sidebar">
+        <div style={{maxWidth:'1100px',margin:'0 auto',padding:'2rem 1.5rem 3rem',width:'100%'}}>
 
-        <div className="post-card fade-in" style={{marginBottom:'0.65rem'}}>
-          <div style={{display:'flex', alignItems:'center', gap:'1rem', marginBottom:'0.875rem'}}>
-            <Avatar user={profile} size={62} radius="16px"/>
-            <div style={{flex:1}}>
-              <h2 style={{fontWeight:700, color:'white', fontSize:'1.1rem'}}>{profile?.name}</h2>
-              <div style={{display:'flex', alignItems:'center', gap:'0.4rem', flexWrap:'wrap', marginTop:'0.2rem'}}>
-                <span className={profile?.role === 'senior' ? 'badge-senior' : 'badge-junior'}>{profile?.role}</span>
-                {/* Connected badge - subtle under name */}
-                {connectionStatus === 'connected' && !isOwnProfile && (
-                  <span style={{color:'rgba(34,197,94,0.7)', fontSize:'0.68rem', display:'flex', alignItems:'center', gap:'0.2rem'}}>
-                    <UserCheck size={11}/> Connected
-                  </span>
+          {/* Profile Bento */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 280px',gap:'1rem',marginBottom:'2rem'}} className="profile-grid">
+
+            {/* Left Card */}
+            <div className="glass-card" style={{padding:'1.75rem',display:'flex',gap:'1.5rem',alignItems:'flex-start',flexWrap:'wrap'}}>
+              <div style={{width:'88px',height:'88px',borderRadius:'50%',overflow:'hidden',border:'3px solid rgba(34,197,94,0.3)',flexShrink:0}}>
+                {profileUser.avatar ? (
+                  <img src={profileUser.avatar} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}}/>
+                ) : (
+                  <div style={{width:'100%',height:'100%',background:'linear-gradient(135deg,rgba(34,197,94,0.2),rgba(15,61,46,0.3))',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'2rem',fontWeight:800,color:'#22c55e',fontFamily:"'Plus Jakarta Sans',sans-serif"}}>
+                    {profileUser.name?.charAt(0)}
+                  </div>
                 )}
-                {profile?.bloodGroup && (
-                  <span style={{color:'#f87171', fontSize:'0.68rem', display:'flex', alignItems:'center', gap:'0.2rem'}}>
-                    <Droplets size={10}/>{profile.bloodGroup}
-                  </span>
-                )}
-                {profile?.gender && <span style={{color:'rgba(255,255,255,0.3)', fontSize:'0.68rem'}}>• {profile.gender}</span>}
               </div>
-            </div>
-            {!isOwnProfile && (
-              <div style={{flexShrink:0}}>
-                <ConnectButton/>
-              </div>
-            )}
-          </div>
-
-          <div style={{display:'flex', flexDirection:'column', gap:'0.4rem', paddingTop:'0.65rem', borderTop:'1px solid rgba(255,255,255,0.06)'}}>
-            {profile?.department && (
-              <p style={{color:'rgba(255,255,255,0.45)', fontSize:'0.8rem', display:'flex', alignItems:'center', gap:'0.4rem'}}>
-                <BookOpen size={13} color="#22c55e"/> {profile.department} • Batch {profile.batch}
-              </p>
-            )}
-            {profile?.studentId && (
-              <p style={{color:'rgba(255,255,255,0.35)', fontSize:'0.78rem', display:'flex', alignItems:'center', gap:'0.4rem'}}>
-                <MapPin size={13} color="#22c55e"/> Student ID: {profile.studentId}
-              </p>
-            )}
-            {profile?.bio && <p style={{color:'rgba(255,255,255,0.6)', fontSize:'0.82rem', marginTop:'0.25rem'}}>📝 {profile.bio}</p>}
-            {profile?.skills && <p style={{color:'rgba(255,255,255,0.45)', fontSize:'0.78rem'}}>🛠️ {profile.skills}</p>}
-          </div>
-        </div>
-
-        <div className="post-card">
-          <h3 style={{color:'#22c55e', fontWeight:600, marginBottom:'0.65rem', fontSize:'0.875rem'}}>Posts ({posts.length})</h3>
-          {posts.length === 0 ? (
-            <p style={{color:'rgba(255,255,255,0.25)', fontSize:'0.8rem'}}>No posts yet.</p>
-          ) : (
-            <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
-              {posts.map((post) => (
-                <div key={post.id} style={{background:'rgba(255,255,255,0.03)', borderRadius:'9px', padding:'0.65rem 0.85rem', border:'1px solid rgba(255,255,255,0.06)'}}>
-                  {post.content && <p style={{color:'rgba(255,255,255,0.75)', fontSize:'0.82rem', lineHeight:'1.5'}}>{post.content}</p>}
-                  {post.images && post.images.length > 0 && (
-                    <div style={{display:'flex', gap:'0.35rem', marginTop:'0.4rem', flexWrap:'wrap'}}>
-                      {post.images.map((img, i) => (
-                        <img key={i} src={img.url} alt="" style={{width:'70px', height:'70px', objectFit:'cover', borderRadius:'6px', cursor:'pointer'}} onClick={() => window.open(img.url, '_blank')}/>
-                      ))}
-                    </div>
-                  )}
-                  <div style={{display:'flex', alignItems:'center', gap:'0.5rem', marginTop:'0.5rem', paddingTop:'0.4rem', borderTop:'1px solid rgba(255,255,255,0.04)'}}>
-                    <span style={{color:'rgba(255,255,255,0.2)', fontSize:'0.68rem'}}>{new Date(post.createdAt).toLocaleDateString()}</span>
-                    <div style={{marginLeft:'auto', display:'flex', gap:'0.25rem'}}>
-                      <button className="btn-ghost" style={{fontSize:'0.72rem', padding:'0.2rem 0.5rem'}}><ThumbsUp size={11}/> Like</button>
-                      <button className="btn-ghost" style={{fontSize:'0.72rem', padding:'0.2rem 0.5rem'}}><MessageCircle size={11}/> Comment</button>
+              <div style={{flex:1,minWidth:'200px'}}>
+                <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:'1rem',flexWrap:'wrap',marginBottom:'0.5rem'}}>
+                  <div>
+                    <h2 style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:800,fontSize:'1.4rem',color:'white',lineHeight:1.2,marginBottom:'0.35rem'}}>{profileUser.name}</h2>
+                    <div style={{display:'flex',alignItems:'center',gap:'0.5rem',flexWrap:'wrap'}}>
+                      <span className={profileUser.role==='senior'?'badge-senior':'badge-junior'}>{profileUser.role}</span>
+                      {profileUser.bloodGroup && (
+                        <span style={{color:'#f87171',fontSize:'0.7rem',display:'flex',alignItems:'center',gap:'0.2rem',background:'rgba(239,68,68,0.1)',padding:'2px 8px',borderRadius:'999px',border:'1px solid rgba(239,68,68,0.2)'}}>
+                          <Droplets size={10}/>{profileUser.bloodGroup}
+                        </span>
+                      )}
                     </div>
                   </div>
+                  <ConnectButton/>
+                </div>
+                {profileUser.department && (
+                  <p style={{color:'var(--text2)',fontSize:'0.82rem',display:'flex',alignItems:'center',gap:'0.4rem',marginBottom:'0.25rem'}}>
+                    <BookOpen size={14} color="#22c55e"/> {profileUser.department} • Batch {profileUser.batch}
+                  </p>
+                )}
+                {profileUser.studentId && (
+                  <p style={{color:'var(--text3)',fontSize:'0.78rem',display:'flex',alignItems:'center',gap:'0.4rem',marginBottom:'0.4rem'}}>
+                    <MapPin size={13} color="#22c55e"/> ID: {profileUser.studentId}
+                  </p>
+                )}
+                {profileUser.bio && (
+                  <p style={{color:'var(--text2)',fontSize:'0.85rem',lineHeight:'1.6',marginBottom:'0.4rem'}}>{profileUser.bio}</p>
+                )}
+                {profileUser.skills && (
+                  <p style={{color:'var(--text3)',fontSize:'0.78rem'}}>🛠️ {profileUser.skills}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Right Stats */}
+            <div className="glass-card" style={{padding:'1.5rem',display:'flex',flexDirection:'column',justifyContent:'center'}}>
+              {[
+                {label:'Posts', value: posts.length, color:'#22c55e'},
+                {label:'Connections', value: connStatus.status==='connected'?'Connected':'—', color: connStatus.status==='connected'?'#22c55e':'var(--text2)'},
+                {label:'Department', value: profileUser.department||'—', color:'#60a5fa'},
+                {label:'Batch', value: profileUser.batch||'—', color:'var(--text2)'},
+              ].map((stat,i,arr) => (
+                <div key={stat.label} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0.875rem 0',borderBottom:i<arr.length-1?'1px solid rgba(34,197,94,0.08)':'none'}}>
+                  <span style={{color:'var(--text2)',fontSize:'0.85rem'}}>{stat.label}</span>
+                  <span style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:700,fontSize: typeof stat.value==='number'?'1.3rem':'0.85rem',color:stat.color}}>
+                    {stat.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Posts */}
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'1rem',paddingBottom:'0.75rem',borderBottom:'1px solid rgba(34,197,94,0.1)'}}>
+            <h3 style={{fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:700,fontSize:'1.1rem',color:'white'}}>Posts by {profileUser.name?.split(' ')[0]}</h3>
+            <span style={{color:'var(--text3)',fontSize:'0.8rem'}}>{posts.length} posts</span>
+          </div>
+
+          {posts.length === 0 ? (
+            <div className="glass-card" style={{padding:'3rem',textAlign:'center'}}>
+              <p style={{color:'var(--text2)',fontSize:'0.875rem'}}>No posts yet.</p>
+            </div>
+          ) : (
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:'0.875rem'}} className="stagger-children">
+              {posts.map((post,idx) => (
+                <div key={post.id} className="glass-card pulse-hover" style={{padding:'1.1rem',animationDelay:`${idx*0.05}s`,display:'flex',flexDirection:'column'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:'0.65rem'}}>
+                    <Avatar user={profileUser} size={32} radius="9px"/>
+                    <div style={{flex:1}}>
+                      <p style={{color:'white',fontWeight:600,fontSize:'0.82rem',fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{profileUser.name}</p>
+                      <p style={{color:'var(--text3)',fontSize:'0.68rem'}}>{new Date(post.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</p>
+                    </div>
+                  </div>
+
+                  {post.content && (
+                    <p style={{color:'rgba(255,255,255,0.82)',fontSize:'0.85rem',lineHeight:'1.6',marginBottom: post.images?.length>0?'0.5rem':'0.65rem',whiteSpace:'pre-wrap',flex:1}}>{post.content}</p>
+                  )}
+                  {post.images && post.images.length > 0 && (
+                    <ImageCarousel images={post.images} onImageClick={(i)=>setLightbox({images:post.images,index:i})}/>
+                  )}
+
+                  {(likeCounts[post.id]>0||post._count?.comments>0) && (
+                    <div style={{display:'flex',gap:'0.75rem',marginBottom:'0.4rem',paddingBottom:'0.4rem',borderBottom:'1px solid rgba(255,255,255,0.05)'}}>
+                      {likeCounts[post.id]>0 && (
+                        <span style={{color:'var(--text3)',fontSize:'0.72rem',display:'flex',alignItems:'center',gap:'0.25rem'}}>
+                          <ThumbsUp size={11} color="#22c55e"/> {likeCounts[post.id]} likes
+                        </span>
+                      )}
+                      {post._count?.comments>0 && (
+                        <span style={{color:'var(--text3)',fontSize:'0.72rem',display:'flex',alignItems:'center',gap:'0.25rem'}}>
+                          <MessageCircle size={11} color="#60a5fa"/> {post._count.comments} comments
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  <div style={{display:'flex',gap:'0.2rem'}}>
+                    <button className={`btn-ghost ${likedPosts[post.id]?'active':''}`} onClick={()=>handleLike(post.id)}
+                      style={{color:likedPosts[post.id]?'#22c55e':undefined,fontSize:'0.78rem'}}>
+                      <ThumbsUp size={13}/> Like
+                    </button>
+                    <button className="btn-ghost" onClick={()=>openComments(post.id)}
+                      style={{color:commentOpen===post.id?'#60a5fa':undefined,fontSize:'0.78rem'}}>
+                      <MessageCircle size={13}/> Comment
+                    </button>
+                    {connStatus.status==='connected' && (
+                      <button className="btn-ghost" onClick={()=>router.push(`/messages?userId=${userId}&userName=${encodeURIComponent(profileUser?.name)}`)}
+                        style={{fontSize:'0.78rem',marginLeft:'auto'}}>
+                        <MessageSquare size={13}/> Message
+                      </button>
+                    )}
+                  </div>
+
+                  {commentOpen===post.id && (
+                    <div style={{borderTop:'1px solid rgba(255,255,255,0.06)',paddingTop:'0.6rem',marginTop:'0.4rem',animation:'fadeIn 0.25s ease'}}>
+                      <div style={{display:'flex',flexDirection:'column',gap:'0.4rem',marginBottom:'0.5rem',maxHeight:'180px',overflowY:'auto'}}>
+                        {!comments[post.id] ? (
+                          <p style={{color:'var(--text3)',fontSize:'0.78rem',textAlign:'center'}}>Loading...</p>
+                        ) : comments[post.id].length===0 ? (
+                          <p style={{color:'var(--text3)',fontSize:'0.78rem',textAlign:'center'}}>No comments yet</p>
+                        ) : comments[post.id].map(comment => (
+                          <div key={comment.id} style={{display:'flex',gap:'0.4rem',alignItems:'flex-start'}}>
+                            <Avatar user={comment.user} size={24} radius="6px"/>
+                            <div style={{flex:1}}>
+                              <div style={{background:'rgba(255,255,255,0.05)',borderRadius:'8px',padding:'0.35rem 0.6rem'}}>
+                                <p style={{color:'#22c55e',fontSize:'0.7rem',fontWeight:700,marginBottom:'0.05rem'}}>{comment.user?.name}</p>
+                                <p style={{color:'rgba(255,255,255,0.75)',fontSize:'0.78rem',lineHeight:'1.4'}}>{comment.content}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <form onSubmit={e=>handleComment(e,post.id)} style={{display:'flex',gap:'0.35rem',alignItems:'center'}}>
+                        <Avatar user={currentUser} size={24} radius="6px"/>
+                        <input type="text" value={newComment[post.id]||''} onChange={e=>setNewComment(prev=>({...prev,[post.id]:e.target.value}))}
+                          placeholder="Comment..." className="input-field" style={{fontSize:'0.78rem',padding:'0.32rem 0.65rem',borderRadius:'999px'}}/>
+                        <button type="submit" disabled={!newComment[post.id]?.trim()} className="btn-primary" style={{padding:'0.32rem 0.6rem',flexShrink:0}}>
+                          <Send size={12}/>
+                        </button>
+                      </form>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </div>
+        {/* <Footer/> */}
       </div>
-      <Footer/>
+
+      {lightbox && <Lightbox images={lightbox.images} startIndex={lightbox.index} onClose={()=>setLightbox(null)}/>}
+      <style>{`
+        @media(max-width:860px){.profile-grid{grid-template-columns:1fr!important}}
+        @keyframes spin{to{transform:rotate(360deg)}}
+      `}</style>
     </div>
   );
 }

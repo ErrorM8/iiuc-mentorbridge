@@ -1,7 +1,7 @@
 const prisma = require('../prismaClient');
 const cloudinary = require('cloudinary').v2;
 const multer = require('multer');
-const Groq = require('groq-sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -9,104 +9,144 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+let genAI = null;
+try {
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'test') {
+    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    console.log('✅ Gemini AI ready for resources');
+  }
+} catch (e) {
+  console.log('⚠️ Gemini not available:', e.message);
+}
 
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'application/pdf') cb(null, true);
     else cb(new Error('Only PDF files allowed'), false);
-  }
+  },
 });
 
-// Auto AI Analysis after upload
-const analyzeWithAI = async (buffer, title, courseCode) => {
-  try {
-    let text = `Document: ${title} for course ${courseCode}`;
-    try {
-      const pdfParse = require('pdf-parse');
-      const pdfData = await pdfParse(buffer);
-      text = pdfData.text.slice(0, 3000);
-    } catch (e) { console.log('PDF parse skipped'); }
-
-    const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        {
-          role: 'system',
-          content: `You are an academic assistant for IIUC students. Analyze this document for course ${courseCode} and provide a structured summary that can help students understand the material.`
-        },
-        {
-          role: 'user',
-          content: `Analyze this academic document titled "${title}" and provide:\n1. Brief Summary\n2. Key Topics Covered\n3. Important Points to Remember\n4. Study Tips\n\nContent:\n${text}`
-        }
-      ],
-      max_tokens: 800,
-    });
-    return completion.choices[0].message.content;
-  } catch (error) {
-    return 'AI analysis not available for this document.';
-  }
-};
-
-// Get departments
 const getDepartments = async (req, res) => {
   try {
-    const departments = await prisma.department.findMany({
-      include: { _count: { select: { courses: true } } },
-      orderBy: { name: 'asc' }
-    });
+    const departments = await prisma.department.findMany({ orderBy: { name: 'asc' } });
     res.json(departments);
   } catch (error) {
+    console.error('Get departments error:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-// Get courses
 const getCourses = async (req, res) => {
   try {
     const { departmentId, examType } = req.query;
+    const where = {};
+    if (departmentId) where.departmentId = parseInt(departmentId);
+
+    // examType filter — only if column exists
+    if (examType) {
+      try {
+        // Try with examType filter
+        const courses = await prisma.course.findMany({
+          where: { ...where, examType },
+          orderBy: { name: 'asc' },
+        });
+        return res.json(courses);
+      } catch (e) {
+        // examType column might not exist yet — return all for department
+        console.log('examType filter failed, returning all:', e.message);
+      }
+    }
+
     const courses = await prisma.course.findMany({
-      where: { departmentId: parseInt(departmentId) },
-      include: {
-        _count: { select: { resources: { where: { examType } } } }
-      },
-      orderBy: { code: 'asc' }
+      where,
+      orderBy: { name: 'asc' },
     });
     res.json(courses);
   } catch (error) {
+    console.error('Get courses error:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-// Create course
 const createCourse = async (req, res) => {
   try {
-    const { code, name, departmentId } = req.body;
-    const existing = await prisma.course.findFirst({
-      where: { code: code.toUpperCase(), departmentId: parseInt(departmentId) }
-    });
-    if (existing) return res.status(400).json({ message: `Course ${code.toUpperCase()} already exists in this department` });
+    const { name, code, departmentId, examType } = req.body;
+    if (!name || !departmentId) {
+      return res.status(400).json({ message: 'Name and departmentId required' });
+    }
 
-    const course = await prisma.course.create({
-      data: { code: code.toUpperCase(), name: name || code.toUpperCase(), departmentId: parseInt(departmentId) }
-    });
+    const dept = await prisma.department.findUnique({ where: { id: parseInt(departmentId) } });
+    if (!dept) return res.status(404).json({ message: 'Department not found' });
+
+    // Check duplicate
+    try {
+      const existing = await prisma.course.findFirst({
+        where: { name, departmentId: parseInt(departmentId), examType: examType || null }
+      });
+      if (existing) return res.status(400).json({ message: 'Course folder already exists' });
+    } catch {}
+
+    let course;
+    try {
+      course = await prisma.course.create({
+        data: { name, code: code || null, departmentId: parseInt(departmentId), examType: examType || null }
+      });
+    } catch (e) {
+      // If examType column doesn't exist yet
+      course = await prisma.course.create({
+        data: { name, code: code || null, departmentId: parseInt(departmentId) }
+      });
+    }
+
     res.status(201).json(course);
   } catch (error) {
+    console.error('Create course error:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
-// Get resources
 const getResources = async (req, res) => {
   try {
-    const { courseId, examType } = req.query;
+    const { courseId } = req.query;
+    const where = {};
+    if (courseId) where.courseId = parseInt(courseId);
+
     const resources = await prisma.resource.findMany({
-      where: { courseId: parseInt(courseId), examType },
-      include: { user: { select: { id: true, name: true } } },
-      orderBy: { createdAt: 'desc' }
+      where,
+      include: {
+        user: { select: { id:true, name:true, avatar:true } },
+        course: { select: { id:true, name:true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(resources);
+  } catch (error) {
+    console.error('Get resources error:', error.message);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+const searchResources = async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q?.trim()) return res.json([]);
+
+    const resources = await prisma.resource.findMany({
+      where: {
+        OR: [
+          { title: { contains: q, mode: 'insensitive' } },
+          { course: { name: { contains: q, mode: 'insensitive' } } },
+        ],
+      },
+      include: {
+        user: { select: { id:true, name:true, avatar:true } },
+        course: { select: { id:true, name:true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
     });
     res.json(resources);
   } catch (error) {
@@ -114,114 +154,70 @@ const getResources = async (req, res) => {
   }
 };
 
-// Upload resource (auto AI analysis)
 const uploadResource = async (req, res) => {
   try {
-    const { courseId, examType, title } = req.body;
-    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    const { title, courseId } = req.body;
+    if (!title || !courseId) return res.status(400).json({ message: 'Title and courseId required' });
+    if (!req.file) return res.status(400).json({ message: 'PDF file required' });
 
-    // Get course info for AI context
-    const course = await prisma.course.findUnique({ where: { id: parseInt(courseId) } });
-
-    // Upload to Cloudinary
     const uploadResult = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
-        { resource_type: 'raw', folder: `mentorbridge/${examType}` },
+        { resource_type:'raw', folder:'mentorbridge/resources', format:'pdf' },
         (error, result) => { if (error) reject(error); else resolve(result); }
       ).end(req.file.buffer);
     });
-
-    // Auto AI Analysis
-    const aiSummary = await analyzeWithAI(req.file.buffer, title, course?.code || '');
 
     const resource = await prisma.resource.create({
       data: {
         title,
         fileUrl: uploadResult.secure_url,
         fileType: 'pdf',
-        examType,
-        aiSummary,
         courseId: parseInt(courseId),
-        userId: req.userId
+        userId: req.userId,
       },
-      include: { user: { select: { id: true, name: true } } }
+      include: {
+        user: { select: { id:true, name:true, avatar:true } },
+        course: { select: { id:true, name:true } },
+      },
     });
 
     res.status(201).json(resource);
   } catch (error) {
+    console.error('Upload error:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
-
-// Get AI summary of a resource
-const getResourceSummary = async (req, res) => {
+const getSummary = async (req, res) => {
   try {
     const resource = await prisma.resource.findUnique({
       where: { id: parseInt(req.params.id) },
-      include: { course: true }
+      select: { title:true, fileUrl:true },
     });
     if (!resource) return res.status(404).json({ message: 'Resource not found' });
-    res.json({ summary: resource.aiSummary, title: resource.title, course: resource.course?.code });
+
+    if (!genAI) {
+      return res.json({
+        summary: `📄 **${resource.title}**\n\nAI summary unavailable. Please configure GEMINI_API_KEY in .env to enable AI summaries.`
+      });
+    }
+
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
+    const prompt = `You are an academic assistant for IIUC students. The document title is: "${resource.title}". Based on the title, generate a helpful 150-200 word academic summary covering: what the document likely covers, key topics to focus on, and study tips. Be practical for university students.`;
+    const result = await model.generateContent(prompt);
+    res.json({ summary: result.response.text() });
   } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
+    console.error('Summary error:', error.message);
+    res.status(500).json({ summary: 'Failed to generate AI summary. Please try again.' });
   }
 };
 
-// Delete resource (only uploader)
 const deleteResource = async (req, res) => {
   try {
     const resource = await prisma.resource.findUnique({ where: { id: parseInt(req.params.id) } });
     if (!resource) return res.status(404).json({ message: 'Resource not found' });
     if (resource.userId !== req.userId) return res.status(403).json({ message: 'Unauthorized' });
-
-    try {
-      const urlParts = resource.fileUrl.split('/');
-      const publicId = `mentorbridge/${resource.examType}/${urlParts[urlParts.length - 1]}`;
-      await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
-    } catch (e) { console.log('Cloudinary delete skipped'); }
-
-    await prisma.resource.delete({ where: { id: parseInt(req.params.id) } });
+    await prisma.resource.delete({ where: { id: resource.id } });
     res.json({ message: 'Resource deleted' });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
-
-// Search resources by course (for AI Mentor)
-const searchResourcesByCourse = async (req, res) => {
-  try {
-    const { query } = req.query;
-    const resources = await prisma.resource.findMany({
-      where: {
-        OR: [
-          { course: { code: { contains: query, mode: 'insensitive' } } },
-          { course: { name: { contains: query, mode: 'insensitive' } } },
-          { title: { contains: query, mode: 'insensitive' } }
-        ]
-      },
-      include: {
-        course: { include: { department: true } },
-        user: { select: { name: true } }
-      },
-      take: 5
-    });
-    res.json(resources);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
-
-// Init departments
-const initDepartments = async (req, res) => {
-  try {
-    const departments = [
-      'CSE', 'CCE', 'EEE', 'ETE', 'Civil Engineering', 'Pharmacy',
-      'BBA', 'MBA', 'English', 'Arabic', 'LIS', 'Law', 'Economics'
-    ];
-    for (const name of departments) {
-      await prisma.department.upsert({ where: { name }, update: {}, create: { name } });
-    }
-    res.json({ message: 'Departments initialized' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -229,6 +225,5 @@ const initDepartments = async (req, res) => {
 
 module.exports = {
   getDepartments, getCourses, createCourse, getResources,
-  uploadResource, getResourceSummary, deleteResource,
-  searchResourcesByCourse, initDepartments, upload
+  searchResources, uploadResource, getSummary, deleteResource, upload,
 };

@@ -1,117 +1,563 @@
-import Link from 'next/link';
-import { Mail, Users, Bot, Briefcase, Network, Globe } from 'lucide-react';
-import Logo from '../components/Logo';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+
+import {
+  Mail,
+  Users,
+  BookOpen,
+  Bot,
+  Droplets,
+  ShoppingBag,
+  Award,
+  Code2,
+  ExternalLink,
+} from 'lucide-react';
+
+import Sidebar from '../components/Sidebar';
 import Footer from '../components/Footer';
+import Logo from '../components/Logo';
 
 export default function AboutPage() {
+  const router = useRouter();
+  const [user, setUser] = useState(null);
+
+  // =========================
+  // AUTH CHECK
+  // =========================
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+
+    if (userData) {
+      try {
+        setUser(JSON.parse(userData));
+      } catch (error) {
+        console.error('Invalid user data:', error);
+      }
+    }
+  }, [router]);
+
+  // =========================
+  // FEATURES
+  // =========================
+  const features = [
+    {
+      icon: <Users size={20} color="#22c55e" />,
+      title: 'Community Network',
+      desc: 'Connect with seniors, juniors, and alumni from all IIUC departments for mentorship and guidance.',
+    },
+    {
+      icon: <BookOpen size={20} color="#60a5fa" />,
+      title: 'Academic Resources',
+      desc: 'Share and access study materials, past papers, and resources organized by department and course.',
+    },
+    {
+      icon: <Bot size={20} color="#a78bfa" />,
+      title: 'AI Career Mentor',
+      desc: 'Get 24/7 career advice, technical help, and academic guidance powered by advanced AI.',
+    },
+    {
+      icon: <Droplets size={20} color="#ef4444" />,
+      title: 'Blood Bank',
+      desc: 'Emergency blood request system connecting donors with those in need within the IIUC community.',
+    },
+    {
+      icon: <ShoppingBag size={20} color="#f59e0b" />,
+      title: 'Marketplace',
+      desc: 'Buy and sell items within the campus community — books, electronics, and more.',
+    },
+    {
+      icon: <Award size={20} color="#22c55e" />,
+      title: 'Mentorship System',
+      desc: 'Senior students guide juniors through academic challenges and career decisions.',
+    },
+  ];
+
+  // =========================
+  // TEAM
+  // =========================
+  const team = [
+    {
+      name: 'Sakibul Islam Sakif',
+      id: 'C241268',
+      role: 'Founder · Full-Stack Developer · AI · Database',
+      dept: 'CSE',
+      email: 'islamsakifbul@gmail.com',
+      fb: 'https://www.facebook.com/sakibul.sakif',
+      github: 'https://github.com/ErrorM8',
+    },
+  ];
+
   return (
     <div className="page-bg">
-      <nav className="navbar">
-        <div className="center-wrap" style={{display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.65rem 1.5rem'}}>
-          <Link href="/" style={{display:'flex', alignItems:'center', gap:'0.5rem', textDecoration:'none'}}>
-            <Logo size={32}/>
-            <div>
-              <div style={{fontSize:'0.9rem', fontWeight:800, color:'#22c55e'}}>IIUC</div>
-              <div style={{fontSize:'0.62rem', color:'rgba(255,255,255,0.4)'}}>MentorBridge</div>
+
+      {/* =========================
+          SIDEBAR
+      ========================= */}
+      <Sidebar user={user} />
+
+      {/* =========================
+          MAIN AREA
+      ========================= */}
+      <div className="main-with-sidebar">
+
+        {/* =========================
+            PAGE CONTENT
+        ========================= */}
+        <div
+          className="center-wrap"
+          style={{
+            flex: 1,
+            paddingTop: '2rem',
+            paddingBottom: '3rem',
+          }}
+        >
+
+          {/* =========================
+              HERO
+          ========================= */}
+          <div
+            className="glass-card"
+            style={{
+              padding: '2.5rem',
+              textAlign: 'center',
+              marginBottom: '1.5rem',
+              background:
+                'linear-gradient(135deg, rgba(34,197,94,0.08), rgba(15,61,46,0.15))',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                marginBottom: '1rem',
+                animation: 'float 3s ease-in-out infinite',
+              }}
+            >
+              <Logo size={64} />
             </div>
-          </Link>
-          <div style={{display:'flex', gap:'1rem', alignItems:'center'}}>
-            <Link href="/login" className="nav-link" style={{fontSize:'0.85rem'}}>Login</Link>
-            <Link href="/register" className="btn-primary" style={{padding:'0.45rem 1.1rem', fontSize:'0.82rem'}}>Join Now</Link>
+
+            <h1
+              style={{
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+                fontWeight: 800,
+                fontSize: '2rem',
+                color: 'white',
+                marginBottom: '0.5rem',
+              }}
+            >
+              IIUC{' '}
+              <span style={{ color: '#22c55e' }}>
+                MentorBridge
+              </span>
+            </h1>
+
+            <p
+              style={{
+                color: 'var(--text2)',
+                fontSize: '1rem',
+                maxWidth: '500px',
+                margin: '0 auto',
+                lineHeight: '1.7',
+              }}
+            >
+              Connecting IIUC students and alumni for mentorship,
+              collaboration, and career growth.
+            </p>
           </div>
-        </div>
-      </nav>
 
-      <div className="center-wrap" style={{flex:1, paddingTop:'2rem', paddingBottom:'3rem'}}>
-        {/* Hero */}
-        <div style={{textAlign:'center', marginBottom:'2.5rem'}} className="fade-in">
-          <div style={{display:'flex', justifyContent:'center', marginBottom:'1rem'}}>
-            <Logo size={64}/>
-          </div>
-          <h1 className="gradient-text" style={{fontSize:'2.2rem', fontWeight:800, marginBottom:'0.5rem'}}>IIUC MentorBridge</h1>
-          <p style={{color:'rgba(255,255,255,0.45)', fontSize:'0.95rem', maxWidth:'500px', margin:'0 auto'}}>
-            Connecting IIUC students with alumni for mentorship, career guidance, and lifelong networking.
-          </p>
-          <Link href="/register" className="btn-primary" style={{display:'inline-flex', marginTop:'1.25rem', padding:'0.65rem 1.75rem'}}>
-            Get Started →
-          </Link>
-        </div>
+          {/* =========================
+              FEATURES TITLE
+          ========================= */}
+          <h3
+            style={{
+              fontFamily: "'Plus Jakarta Sans', sans-serif",
+              color: 'white',
+              fontWeight: 700,
+              fontSize: '1.1rem',
+              marginBottom: '0.875rem',
+            }}
+          >
+            What We Offer
+          </h3>
 
-        {/* Mission Cards */}
-        <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px,1fr))', gap:'0.75rem', marginBottom:'2rem'}}>
-          {[
-            { icon: Users, title:'Our Mission', desc:'Bridge the gap between students and successful alumni to foster a culture of mentorship.' },
-            { icon: Network, title:'Our Vision', desc:'Build the largest IIUC alumni-student network where every student has access to a mentor.' },
-            { icon: Briefcase, title:'Our Values', desc:'Community, integrity, and collaboration. We believe in giving back and lifting others.' },
-          ].map((item) => (
-            <div key={item.title} className="glass-card" style={{padding:'1.25rem', textAlign:'center'}}>
-              <div style={{width:'40px', height:'40px', borderRadius:'10px', background:'rgba(34,197,94,0.12)', border:'1px solid rgba(34,197,94,0.25)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 0.75rem'}}>
-                <item.icon size={18} color="#22c55e"/>
-              </div>
-              <h3 style={{fontWeight:700, color:'white', fontSize:'0.9rem', marginBottom:'0.4rem'}}>{item.title}</h3>
-              <p style={{color:'rgba(255,255,255,0.4)', fontSize:'0.78rem', lineHeight:'1.6'}}>{item.desc}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Features */}
-        <div className="post-card" style={{marginBottom:'1.5rem'}}>
-          <h2 style={{fontWeight:700, color:'#22c55e', fontSize:'1rem', marginBottom:'1rem'}}>What We Offer</h2>
-          <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px,1fr))', gap:'0.65rem'}}>
-            {[
-              { icon: Users, title:'Senior-Junior Network', desc:'Connect with seniors in your field.' },
-              { icon: Bot, title:'AI Career Mentor', desc:'Get instant career guidance from AI.' },
-              { icon: Briefcase, title:'Job & Internship Tips', desc:'Learn from those who have been there.' },
-              { icon: Network, title:'Professional Connections', desc:'Build your network before you graduate.' },
-            ].map((item) => (
-              <div key={item.title} style={{display:'flex', gap:'0.65rem', padding:'0.65rem', borderRadius:'10px', background:'rgba(34,197,94,0.06)', border:'1px solid rgba(34,197,94,0.14)'}}>
-                <div style={{width:'32px', height:'32px', borderRadius:'8px', background:'rgba(34,197,94,0.12)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}}>
-                  <item.icon size={15} color="#22c55e"/>
+          {/* =========================
+              FEATURES
+          ========================= */}
+          <div
+            className="stagger-children"
+            style={{
+              display: 'grid',
+              gridTemplateColumns:
+                'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: '0.75rem',
+              marginBottom: '1.75rem',
+            }}
+          >
+            {features.map((feature, index) => (
+              <div
+                key={index}
+                className="glass-card pulse-hover"
+                style={{
+                  padding: '1.25rem',
+                }}
+              >
+                {/* Feature Icon */}
+                <div
+                  style={{
+                    width: '42px',
+                    height: '42px',
+                    borderRadius: '11px',
+                    background: 'rgba(255,255,255,0.05)',
+                    border:
+                      '1px solid rgba(34,197,94,0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: '0.75rem',
+                  }}
+                >
+                  {feature.icon}
                 </div>
-                <div>
-                  <h4 style={{fontWeight:600, color:'rgba(255,255,255,0.85)', fontSize:'0.8rem'}}>{item.title}</h4>
-                  <p style={{color:'rgba(255,255,255,0.4)', fontSize:'0.72rem'}}>{item.desc}</p>
-                </div>
+
+                {/* Feature Title */}
+                <p
+                  style={{
+                    color: 'white',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    marginBottom: '0.35rem',
+                    fontFamily:
+                      "'Plus Jakarta Sans', sans-serif",
+                  }}
+                >
+                  {feature.title}
+                </p>
+
+                {/* Feature Description */}
+                <p
+                  style={{
+                    color: 'var(--text2)',
+                    fontSize: '0.8rem',
+                    lineHeight: '1.6',
+                  }}
+                >
+                  {feature.desc}
+                </p>
               </div>
             ))}
           </div>
-        </div>
 
-        {/* Developer Info */}
-        <div className="post-card" style={{marginBottom:'1.5rem'}}>
-          <h2 style={{fontWeight:700, color:'#22c55e', fontSize:'1rem', marginBottom:'1rem'}}>About the Developer</h2>
-          <div style={{display:'flex', alignItems:'center', gap:'1rem'}}>
-            <div className="avatar" style={{width:'56px', height:'56px', fontSize:'1.4rem', borderRadius:'14px', flexShrink:0}}>S</div>
-            <div>
-              <h3 style={{fontWeight:700, color:'white', fontSize:'0.95rem'}}>Sakibul Islam Sakif</h3>
-              <p style={{color:'rgba(255,255,255,0.4)', fontSize:'0.78rem'}}>IIUC • CSE Department</p>
-              <div style={{display:'flex', gap:'0.75rem', marginTop:'0.5rem', flexWrap:'wrap'}}>
-                <a href="mailto:islamsakifbul@gmail.com" style={{display:'flex', alignItems:'center', gap:'0.3rem', color:'#22c55e', fontSize:'0.78rem', textDecoration:'none'}}>
-                  <Mail size={13}/> islamsakifbul@gmail.com
-                </a>
-                <a href="https://www.facebook.com/sakibul.sakif" target="_blank" rel="noreferrer" style={{display:'flex', alignItems:'center', gap:'0.3rem', color:'#22c55e', fontSize:'0.78rem', textDecoration:'none'}}>
-                  <Globe size={13}/> facebook.com/sakibul.sakif
-                </a>
+          {/* =========================
+              TEAM TITLE
+          ========================= */}
+          <h3
+            style={{
+              fontFamily: "'Plus Jakarta Sans', sans-serif",
+              color: 'white',
+              fontWeight: 700,
+              fontSize: '1.1rem',
+              marginBottom: '0.875rem',
+            }}
+          >
+            Team Error Mate
+          </h3>
+
+          {/* =========================
+              TEAM CARD
+              FIXED: ONE COLUMN
+          ========================= */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr)',
+              width: '100%',
+              gap: '0.75rem',
+              marginBottom: '1.75rem',
+            }}
+          >
+            {team.map((member, index) => (
+              <div
+                key={index}
+                className="glass-card"
+                style={{
+                  width: '100%',
+                  padding: '1.5rem',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '1.25rem',
+                  flexWrap: 'wrap',
+                }}
+              >
+
+                {/* =========================
+                    PROFILE AVATAR
+                ========================= */}
+                <div
+                  style={{
+                    width: '58px',
+                    height: '58px',
+                    minWidth: '58px',
+                    borderRadius: '15px',
+                    background:
+                      'linear-gradient(135deg, rgba(34,197,94,0.2), rgba(15,61,46,0.3))',
+                    border:
+                      '1px solid rgba(34,197,94,0.2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.4rem',
+                    fontWeight: 800,
+                    color: '#22c55e',
+                    fontFamily:
+                      "'Plus Jakarta Sans', sans-serif",
+                  }}
+                >
+                  {member.name.charAt(0)}
+                </div>
+
+                {/* =========================
+                    PROFILE INFORMATION
+                ========================= */}
+                <div
+                  style={{
+                    flex: 1,
+                    minWidth: '220px',
+                  }}
+                >
+                  {/* Name */}
+                  <p
+                    style={{
+                      color: 'white',
+                      fontWeight: 700,
+                      fontSize: '1rem',
+                      marginBottom: '0.2rem',
+                      fontFamily:
+                        "'Plus Jakarta Sans', sans-serif",
+                    }}
+                  >
+                    {member.name}
+                  </p>
+
+                  {/* ID */}
+                  <p
+                    style={{
+                      color: '#22c55e',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      marginBottom: '0.3rem',
+                    }}
+                  >
+                    {member.id}
+                  </p>
+
+                  {/* Role */}
+                  <p
+                    style={{
+                      color: 'var(--text2)',
+                      fontSize: '0.8rem',
+                      marginBottom: '0.3rem',
+                    }}
+                  >
+                    {member.role}
+                  </p>
+
+                  {/* Department */}
+                  <p
+                    style={{
+                      color: 'var(--text3)',
+                      fontSize: '0.75rem',
+                      marginBottom: '0.7rem',
+                    }}
+                  >
+                    Department of {member.dept}
+                  </p>
+
+                  {/* =========================
+                      SOCIAL / CONTACT
+                  ========================= */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '1rem',
+                      flexWrap: 'wrap',
+                    }}
+                  >
+
+                    {/* Email */}
+                    {member.email && (
+                      <a
+                        href={`mailto:${member.email}`}
+                        style={{
+                          color: 'var(--text3)',
+                          fontSize: '0.75rem',
+                          textDecoration: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                        }}
+                      >
+                        <Mail size={12} />
+                        {member.email}
+                      </a>
+                    )}
+
+                    {/* Facebook */}
+                    {member.fb && (
+                      <a
+                        href={member.fb}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          color: 'var(--text3)',
+                          fontSize: '0.75rem',
+                          textDecoration: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                        }}
+                      >
+                        <ExternalLink size={12} />
+                        Facebook
+                      </a>
+                    )}
+
+                    {/* GitHub */}
+                    {member.github && (
+                      <a
+                        href={member.github}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          color: 'var(--text3)',
+                          fontSize: '0.75rem',
+                          textDecoration: 'none',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem',
+                        }}
+                      >
+                        <Code2 size={12} />
+                        github.com/ErrorM8
+                      </a>
+                    )}
+
+                  </div>
+                </div>
+
               </div>
-            </div>
+            ))}
           </div>
+
+          {/* =========================
+              OPEN SOURCE
+          ========================= */}
+          <div
+            className="glass-card"
+            style={{
+              padding: '1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '1rem',
+              flexWrap: 'wrap',
+              marginBottom: '0',
+            }}
+          >
+
+            {/* Icon */}
+            <Code2
+              size={28}
+              color="#22c55e"
+            />
+
+            {/* Text */}
+            <div
+              style={{
+                flex: 1,
+                minWidth: '200px',
+              }}
+            >
+              <p
+                style={{
+                  color: 'white',
+                  fontWeight: 700,
+                  fontSize: '0.9rem',
+                  marginBottom: '0.2rem',
+                  fontFamily:
+                    "'Plus Jakarta Sans', sans-serif",
+                }}
+              >
+                Open Source
+              </p>
+
+              <p
+                style={{
+                  color: 'var(--text2)',
+                  fontSize: '0.8rem',
+                }}
+              >
+                This project is publicly available on GitHub
+              </p>
+            </div>
+
+            {/* GitHub Button */}
+            <a
+              href="https://github.com/ErrorM8"
+              target="_blank"
+              rel="noreferrer"
+              className="btn-primary"
+              style={{
+                flexShrink: 0,
+                fontSize: '0.82rem',
+                padding: '0.55rem 1.25rem',
+                textDecoration: 'none',
+              }}
+            >
+              View on GitHub →
+            </a>
+
+          </div>
+
         </div>
 
-        {/* Contact */}
-        <div className="post-card">
-          <h2 style={{fontWeight:700, color:'#22c55e', fontSize:'1rem', marginBottom:'1rem'}}>Contact</h2>
-          <div style={{display:'flex', flexDirection:'column', gap:'0.5rem'}}>
-            <a href="mailto:islamsakifbul@gmail.com" style={{display:'flex', alignItems:'center', gap:'0.5rem', color:'rgba(255,255,255,0.55)', fontSize:'0.82rem', textDecoration:'none'}}>
-              <Mail size={14} color="#22c55e"/> islamsakifbul@gmail.com
-            </a>
-            <a href="https://www.facebook.com/sakibul.sakif" target="_blank" rel="noreferrer" style={{display:'flex', alignItems:'center', gap:'0.5rem', color:'rgba(255,255,255,0.55)', fontSize:'0.82rem', textDecoration:'none'}}>
-              <Globe size={14} color="#22c55e"/> facebook.com/sakibul.sakif
-            </a>
-          </div>
-        </div>
+        {/* =========================
+            FOOTER
+        ========================= */}
+        <Footer />
+
       </div>
 
-      <Footer/>
+      {/* =========================
+          FLOAT ANIMATION
+      ========================= */}
+      <style>
+        {`
+          @keyframes float {
+            0%, 100% {
+              transform: translateY(0);
+            }
+
+            50% {
+              transform: translateY(-5px);
+            }
+          }
+
+          @media (max-width: 600px) {
+            .glass-card {
+              box-sizing: border-box;
+            }
+          }
+        `}
+      </style>
+
     </div>
   );
 }

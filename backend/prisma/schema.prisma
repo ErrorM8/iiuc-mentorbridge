@@ -43,6 +43,25 @@ model User {
   notifications      Notification[]    @relation("NotificationUser")
   posts              Post[]
   resources          Resource[]
+  bloodNotifications Boolean @default(true)
+}
+
+model PendingRegistration {
+  id              Int      @id @default(autoincrement())
+  name            String
+  email           String   @unique
+  passwordHash    String
+  batch           String   @default("")
+  department      String   @default("")
+  role            String   @default("junior")
+  studentId       String?
+  bloodGroup      String?
+  bio             String?
+  skills          String?
+  gender          String   @default("male")
+  otp             String
+  otpExpiry       DateTime
+  createdAt       DateTime @default(now())
 }
 
 model Connection {
@@ -144,43 +163,40 @@ model Department {
 
 model Course {
   id           Int        @id @default(autoincrement())
-  code         String
   name         String
+  code         String?
+  examType     String?    // ← এই line যোগ করো
   departmentId Int
-  createdAt    DateTime   @default(now())
   department   Department @relation(fields: [departmentId], references: [id])
   resources    Resource[]
-
-  @@unique([code, departmentId])
+  createdAt    DateTime   @default(now())
 }
 
 model Resource {
   id        Int      @id @default(autoincrement())
   title     String
   fileUrl   String
-  fileType  String
-  examType  String
+  fileType  String?  // ← ? যোগ করো
   courseId  Int
   userId    Int
-  createdAt DateTime @default(now())
-  aiSummary String?
   course    Course   @relation(fields: [courseId], references: [id])
   user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
 }
 
 model MarketItem {
   id          Int               @id @default(autoincrement())
   title       String
-  description String
+  description String?
   price       Float
-  condition   String
-  category    String
-  userId      Int
+  category    String            @default("Other")
+  condition   String?           // ← ? আছে কিনা দেখো, না থাকলে যোগ করো
   status      String            @default("available")
-  createdAt   DateTime          @default(now())
-  buyRequests BuyRequest[]
+  userId      Int
   user        User              @relation(fields: [userId], references: [id])
   images      MarketItemImage[]
+  buyRequests BuyRequest[]
+  createdAt   DateTime          @default(now())
 }
 
 model MarketItemImage {

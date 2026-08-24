@@ -1,21 +1,22 @@
 const prisma = require('../src/prismaClient');
 
 async function cleanDB() {
-  await prisma.bloodRequest.deleteMany();
-  await prisma.bloodDonor.deleteMany();
-  await prisma.buyRequest.deleteMany();
-  await prisma.marketItemImage.deleteMany();
-  await prisma.marketItem.deleteMany();
-  await prisma.resource.deleteMany();
-  await prisma.notification.deleteMany();
-  await prisma.message.deleteMany();
-  await prisma.commentReaction.deleteMany();
-  await prisma.comment.deleteMany();
-  await prisma.like.deleteMany();
-  await prisma.postImage.deleteMany();
-  await prisma.post.deleteMany();
-  await prisma.connection.deleteMany();
-  await prisma.user.deleteMany();
+  try { await prisma.bloodRequest.deleteMany(); } catch(e) {}
+  try { await prisma.bloodDonor.deleteMany(); } catch(e) {}
+  try { await prisma.buyRequest.deleteMany(); } catch(e) {}
+  try { await prisma.marketItemImage.deleteMany(); } catch(e) {}
+  try { await prisma.marketItem.deleteMany(); } catch(e) {}
+  try { await prisma.resource.deleteMany(); } catch(e) {}
+  try { await prisma.notification.deleteMany(); } catch(e) {}
+  try { await prisma.message.deleteMany(); } catch(e) {}
+  try { await prisma.commentReaction.deleteMany(); } catch(e) {}
+  try { await prisma.comment.deleteMany(); } catch(e) {}
+  try { await prisma.like.deleteMany(); } catch(e) {}
+  try { await prisma.postImage.deleteMany(); } catch(e) {}
+  try { await prisma.post.deleteMany(); } catch(e) {}
+  try { await prisma.connection.deleteMany(); } catch(e) {}
+  try { await prisma.pendingRegistration.deleteMany(); } catch(e) {}
+  try { await prisma.user.deleteMany(); } catch(e) {}
 }
 
 module.exports = { cleanDB };

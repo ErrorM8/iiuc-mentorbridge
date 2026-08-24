@@ -6,14 +6,11 @@
     "groq-sdk": "^1.3.0"
   },
   "scripts": {
-    "test": "jest --coverage",
+    "dev": "nodemon server.js",
+    "test": "jest --forceExit --coverage",
     "test:watch": "jest --watch"
   },
   "jest": {
-    "testEnvironment": "node",
-    "coverageDirectory": "coverage",
-    "collectCoverageFrom": [
-      "src/**/*.js"
-    ]
+    "testEnvironment": "node"
   }
 }

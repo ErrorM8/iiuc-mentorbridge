@@ -11,7 +11,7 @@ cloudinary.config({
 const storage = multer.memoryStorage();
 const avatarUpload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) cb(null, true);
     else cb(new Error('Only images allowed'), false);
@@ -60,14 +60,26 @@ const getUserById = async (req, res) => {
 
 const updateProfile = async (req, res) => {
   try {
-    const { name, bio, skills, batch, department, gender } = req.body;
+    const { name, bio, skills, department, batch, bloodGroup, gender, studentId, bloodNotifications } = req.body;
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (bio !== undefined) updateData.bio = bio;
+    if (skills !== undefined) updateData.skills = skills;
+    if (department !== undefined) updateData.department = department;
+    if (batch !== undefined) updateData.batch = batch;
+    if (bloodGroup !== undefined) updateData.bloodGroup = bloodGroup;
+    if (gender !== undefined) updateData.gender = gender;
+    if (studentId !== undefined) updateData.studentId = studentId;
+    if (bloodNotifications !== undefined) updateData.bloodNotifications = bloodNotifications;
+
     const user = await prisma.user.update({
       where: { id: req.userId },
-      data: { name, bio, skills, batch, department, gender },
+      data: updateData,
       select: {
-        id: true, name: true, email: true, batch: true,
-        department: true, role: true, bio: true, skills: true,
-        avatar: true, gender: true,
+        id: true, name: true, email: true, role: true, avatar: true,
+        department: true, batch: true, bio: true, skills: true,
+        bloodGroup: true, gender: true, studentId: true,
+        bloodNotifications: true, createdAt: true
       }
     });
     res.json({ message: 'Profile updated', user });

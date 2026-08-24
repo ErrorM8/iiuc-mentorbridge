@@ -1,89 +1,45 @@
-const Groq = require('groq-sdk');
-const prisma = require('../prismaClient');
-const multer = require('multer');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
-const storage = multer.memoryStorage();
-const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const chat = async (req, res) => {
   try {
-    const { message } = req.body;
-
-    let resourceContext = '';
-    try {
-      const resources = await prisma.resource.findMany({
-        where: {
-          OR: [
-            { course: { code: { contains: message.split(' ')[0], mode: 'insensitive' } } },
-            { title: { contains: message, mode: 'insensitive' } },
-            { course: { name: { contains: message, mode: 'insensitive' } } }
-          ]
-        },
-        include: { course: true },
-        take: 3
-      });
-
-      if (resources.length > 0) {
-        resourceContext = '\n\nRelevant course resources:\n' +
-          resources.map(r => `- ${r.course?.code}: "${r.title}"\n  Summary: ${r.aiSummary?.slice(0, 300) || 'No summary'}`).join('\n');
-      }
-    } catch (e) { console.log('Resource search skipped'); }
-
-    const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a helpful career mentor and academic assistant for IIUC students on MentorBridge. Help with career guidance, internship advice, courses, and university life. Keep responses helpful and concise.${resourceContext}`
-        },
-        { role: 'user', content: message }
-      ],
-      max_tokens: 600,
-    });
-
-    res.json({ reply: completion.choices[0].message.content });
-  } catch (error) {
-    res.status(500).json({ message: 'AI error', error: error.message });
-  }
-};
-
-const chatWithFile = async (req, res) => {
-  try {
-    const { message } = req.body;
-    let fileContext = '';
-
-    if (req.file) {
-      if (req.file.mimetype === 'application/pdf') {
-        try {
-          const pdfParse = require('pdf-parse');
-          const pdfData = await pdfParse(req.file.buffer);
-          fileContext = `\n\nUser uploaded a PDF file. Content:\n${pdfData.text.slice(0, 3000)}`;
-        } catch (e) {
-          fileContext = `\n\nUser uploaded a PDF file named: ${req.file.originalname}`;
-        }
-      } else if (req.file.mimetype.startsWith('image/')) {
-        fileContext = `\n\nUser uploaded an image file named: ${req.file.originalname}. Please acknowledge and help them.`;
-      }
+    const { message, history = [] } = req.body;
+    if (!message?.trim()) {
+      return res.status(400).json({ message: 'Message required' });
     }
 
-    const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a helpful career mentor and academic assistant for IIUC students. Analyze any provided files and help students understand the content.${fileContext}`
-        },
-        { role: 'user', content: message || 'Please analyze this file and explain what it contains.' }
-      ],
-      max_tokens: 800,
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-3.6-flash',
+      systemInstruction: `You are an AI Career Mentor for IIUC MentorBridge — a platform for students and alumni of International Islamic University Chittagong (IIUC), Bangladesh.
+
+Your role:
+- Help students with career guidance, internship hunting, and job preparation
+- Assist with academic topics: programming, CSE, EEE, BBA, and other IIUC departments
+- Give advice on CGPA improvement, time management, and study strategies
+- Help with technical topics: coding, debugging, project ideas
+- Suggest resources, courses, and certifications relevant to Bangladeshi job market
+- Be encouraging, practical, and culturally relevant to Bangladeshi students
+
+Keep responses concise but helpful. Use bullet points when listing. Respond in English unless the user writes in Bengali, then respond in Bengali.`,
     });
 
-    res.json({ reply: completion.choices[0].message.content });
+    const chatHistory = history
+      .filter(m => m.role && m.content)
+      .map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
+
+    const chatSession = model.startChat({ history: chatHistory });
+    const result = await chatSession.sendMessage(message);
+    const reply = result.response.text();
+
+    res.json({ reply, message: reply });
   } catch (error) {
-    res.status(500).json({ message: 'AI error', error: error.message });
+    console.error('Gemini chat error:', error.message);
+    res.status(500).json({ message: 'AI service error', error: error.message });
   }
 };
 
-module.exports = { chat, chatWithFile, upload };
+module.exports = { chat };

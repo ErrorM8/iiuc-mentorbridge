@@ -3,8 +3,17 @@ const prisma = require('../prismaClient');
 const sendRequest = async (req, res) => {
   try {
     const { receiverId } = req.body;
+    if (!receiverId) return res.status(400).json({ message: 'receiverId required' });
     if (req.userId === parseInt(receiverId)) {
       return res.status(400).json({ message: 'Cannot connect with yourself' });
+    }
+
+    const [sender, receiver] = await Promise.all([
+      prisma.user.findUnique({ where: { id: req.userId } }),
+      prisma.user.findUnique({ where: { id: parseInt(receiverId) } }),
+    ]);
+    if (!sender || !receiver) {
+      return res.status(404).json({ message: 'User not found' });
     }
 
     await prisma.connection.deleteMany({
@@ -13,7 +22,7 @@ const sendRequest = async (req, res) => {
           { senderId: req.userId, receiverId: parseInt(receiverId) },
           { senderId: parseInt(receiverId), receiverId: req.userId }
         ],
-        status: { in: ['rejected', 'disconnected'] }
+        status: 'rejected'
       }
     });
 
@@ -25,7 +34,6 @@ const sendRequest = async (req, res) => {
         ]
       }
     });
-
     if (existing) {
       return res.status(400).json({ message: 'Connection already exists', status: existing.status });
     }
@@ -34,22 +42,20 @@ const sendRequest = async (req, res) => {
       data: { senderId: req.userId, receiverId: parseInt(receiverId) }
     });
 
-    const sender = await prisma.user.findUnique({
-      where: { id: req.userId },
-      select: { name: true }
-    });
-
-    await prisma.notification.create({
-      data: {
-        userId: parseInt(receiverId),
-        senderId: req.userId,
-        type: 'connection_request',
-        message: `${sender.name} sent you a connection request`
-      }
-    });
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: parseInt(receiverId),
+          senderId: req.userId,
+          type: 'connection_request',
+          message: `${sender.name} sent you a connection request`
+        }
+      });
+    } catch (e) { console.error('Notification failed:', e.message); }
 
     res.status(201).json({ message: 'Request sent', connection });
   } catch (error) {
+    console.error('Send request error:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -58,11 +64,7 @@ const cancelRequest = async (req, res) => {
   try {
     const { receiverId } = req.body;
     await prisma.connection.deleteMany({
-      where: {
-        senderId: req.userId,
-        receiverId: parseInt(receiverId),
-        status: 'pending'
-      }
+      where: { senderId: req.userId, receiverId: parseInt(receiverId), status: 'pending' }
     });
     res.json({ message: 'Request cancelled' });
   } catch (error) {
@@ -75,7 +77,7 @@ const getMyRequests = async (req, res) => {
     const requests = await prisma.connection.findMany({
       where: { receiverId: req.userId, status: 'pending' },
       include: {
-        sender: { select: { id: true, name: true, department: true, batch: true, role: true, avatar: true } }
+        sender: { select: { id:true, name:true, department:true, batch:true, role:true, avatar:true } }
       },
       orderBy: { createdAt: 'desc' }
     });
@@ -92,20 +94,22 @@ const updateRequest = async (req, res) => {
       where: { id: parseInt(req.params.id) },
       data: { status },
       include: {
-        sender: { select: { id: true, name: true, avatar: true } },
-        receiver: { select: { id: true, name: true, avatar: true } }
+        sender: { select: { id:true, name:true, avatar:true } },
+        receiver: { select: { id:true, name:true, avatar:true } }
       }
     });
 
     if (status === 'accepted') {
-      await prisma.notification.create({
-        data: {
-          userId: connection.senderId,
-          senderId: connection.receiverId,
-          type: 'connection_accepted',
-          message: `${connection.receiver.name} accepted your connection request`
-        }
-      });
+      try {
+        await prisma.notification.create({
+          data: {
+            userId: connection.senderId,
+            senderId: connection.receiverId,
+            type: 'connection_accepted',
+            message: `${connection.receiver.name} accepted your connection request`
+          }
+        });
+      } catch (e) { console.error('Notification failed:', e.message); }
     }
 
     res.json({ message: `Request ${status}`, connection });
@@ -125,7 +129,7 @@ const disconnect = async (req, res) => {
         ]
       }
     });
-    res.json({ message: 'Disconnected successfully' });
+    res.json({ message: 'Disconnected' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
@@ -162,8 +166,8 @@ const getMyConnections = async (req, res) => {
         ]
       },
       include: {
-        sender: { select: { id: true, name: true, department: true, batch: true, avatar: true } },
-        receiver: { select: { id: true, name: true, department: true, batch: true, avatar: true } }
+        sender: { select: { id:true, name:true, department:true, batch:true, avatar:true, role:true } },
+        receiver: { select: { id:true, name:true, department:true, batch:true, avatar:true, role:true } }
       }
     });
     res.json(connections);
@@ -172,4 +176,7 @@ const getMyConnections = async (req, res) => {
   }
 };
 
-module.exports = { sendRequest, cancelRequest, getMyRequests, updateRequest, disconnect, getConnectionStatus, getMyConnections };
+module.exports = {
+  sendRequest, cancelRequest, getMyRequests, updateRequest,
+  disconnect, getConnectionStatus, getMyConnections
+};
