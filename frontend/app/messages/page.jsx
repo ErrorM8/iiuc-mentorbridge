@@ -1,4 +1,6 @@
 'use client';
+export const dynamic = 'force-dynamic';
+
 import { Suspense } from 'react';
 import { useEffect, useState, useCallback, useRef, memo } from 'react';
 import axios from 'axios';
