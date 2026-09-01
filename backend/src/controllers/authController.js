@@ -19,8 +19,17 @@ try {
     !process.env.EMAIL_USER.startsWith('actual_gmail')
   ) {
     transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
+      family: 4, // Force IPv4
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
     });
     transporter.verify((err) => {
       if (err) {
