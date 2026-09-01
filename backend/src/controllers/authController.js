@@ -19,17 +19,8 @@ try {
     !process.env.EMAIL_USER.startsWith('actual_gmail')
   ) {
     transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587,
-      secure: false, // Port 587 এর জন্য false হতে হবে
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-      family: 4, // <-- Render-এর IPv6 বাইপাস করার আসল ফিক্স
-      tls: {
-        rejectUnauthorized: false
-      }
+      service: 'gmail',
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
     });
     transporter.verify((err) => {
       if (err) {
