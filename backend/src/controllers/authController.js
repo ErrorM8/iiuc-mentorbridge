@@ -22,7 +22,7 @@ try {
       host: 'smtp.gmail.com',
       port: 587,
       secure: false,
-      family: 4, // Force IPv4
+      family: 4,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
@@ -40,7 +40,7 @@ try {
       }
     });
   } else {
-    console.log('⚠️ Email not configured — registration will be blocked');
+    console.log('⚠️ Email not configured properly');
   }
 } catch (e) {
   console.log('⚠️ Nodemailer error:', e.message);
@@ -67,11 +67,9 @@ const sendOTPEmail = async (email, otp, type = 'verify') => {
         ${type === 'verify' ? 'Verify Your Email Address' : 'Reset Your Password'}
       </h2>
       <p style="color:rgba(255,255,255,0.6);font-size:14px;margin-bottom:24px;line-height:1.6">
-        ${
-          type === 'verify'
-            ? 'Enter this OTP to verify your email and create your MentorBridge account.'
-            : 'Enter this OTP to reset your password.'
-        }
+        ${type === 'verify'
+          ? 'Enter this OTP to verify your email and create your MentorBridge account.'
+          : 'Enter this OTP to reset your password.'}
       </p>
       <div style="background:#0f3d2e;border-radius:12px;padding:28px;
         text-align:center;margin:20px 0;border:1px solid rgba(34,197,94,0.3)">
@@ -86,8 +84,7 @@ const sendOTPEmail = async (email, otp, type = 'verify') => {
       </div>
       <p style="color:rgba(255,255,255,0.25);font-size:12px;text-align:center;
         margin-top:20px;line-height:1.6">
-        If you did not request this, please ignore this email.<br/>
-        Do not share this OTP with anyone.
+        If you did not request this, please ignore this email.
       </p>
     </div>
   `;
@@ -99,9 +96,7 @@ const sendOTPEmail = async (email, otp, type = 'verify') => {
   });
 };
 
-// ============================================================
-// REGISTER — stores in PendingRegistration, NOT in User table
-// ============================================================
+// ============ REGISTER ============
 const register = async (req, res) => {
   try {
     const {
@@ -119,7 +114,6 @@ const register = async (req, res) => {
       return res.status(400).json({ message: 'Enter a valid email address' });
     }
 
-    // Block if email already has a verified account
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       return res.status(400).json({
@@ -127,27 +121,21 @@ const register = async (req, res) => {
       });
     }
 
-    // Block if email service not configured
     if (!transporter) {
       return res.status(503).json({
-        message:
-          'Email verification service is not available. ' +
-          'Please contact admin to enable registration.',
+        message: 'Email verification service is not available. Please contact admin.',
         error: 'EMAIL_NOT_CONFIGURED',
       });
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
     const otp = generateOTP();
-    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Upsert PendingRegistration (update if same email resends)
     await prisma.pendingRegistration.upsert({
       where: { email },
       update: {
-        name,
-        passwordHash,
+        name, passwordHash,
         batch: batch || '',
         department: department || '',
         role: role || 'junior',
@@ -156,14 +144,11 @@ const register = async (req, res) => {
         bio: bio || null,
         skills: skills || null,
         gender: gender || 'male',
-        otp,
-        otpExpiry,
+        otp, otpExpiry,
         createdAt: new Date(),
       },
       create: {
-        name,
-        email,
-        passwordHash,
+        name, email, passwordHash,
         batch: batch || '',
         department: department || '',
         role: role || 'junior',
@@ -172,12 +157,10 @@ const register = async (req, res) => {
         bio: bio || null,
         skills: skills || null,
         gender: gender || 'male',
-        otp,
-        otpExpiry,
+        otp, otpExpiry,
       },
     });
 
-    // Send OTP — REQUIRED to proceed
     try {
       await sendOTPEmail(email, otp, 'verify');
       console.log(`✅ OTP sent to ${email}`);
@@ -188,11 +171,9 @@ const register = async (req, res) => {
       });
     } catch (emailErr) {
       console.error('❌ Email failed:', emailErr.message);
-      // Delete the pending record since we couldn't send OTP
       await prisma.pendingRegistration.delete({ where: { email } }).catch(() => {});
       return res.status(500).json({
-        message:
-          'Failed to send verification email. Please check your email address and try again.',
+        message: 'Failed to send verification email. Please check your email address and try again.',
         error: 'EMAIL_SEND_FAILED',
       });
     }
@@ -202,9 +183,7 @@ const register = async (req, res) => {
   }
 };
 
-// ============================================================
-// VERIFY EMAIL — creates User only after correct OTP
-// ============================================================
+// ============ VERIFY EMAIL ============
 const verifyEmail = async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -212,11 +191,9 @@ const verifyEmail = async (req, res) => {
       return res.status(400).json({ message: 'Email and OTP are required' });
     }
 
-    // Find pending registration (NOT in User table)
     const pending = await prisma.pendingRegistration.findUnique({ where: { email } });
 
     if (!pending) {
-      // Check if already verified
       const existing = await prisma.user.findUnique({ where: { email } });
       if (existing) {
         return res.status(400).json({
@@ -229,12 +206,10 @@ const verifyEmail = async (req, res) => {
       });
     }
 
-    // Check OTP
     if (pending.otp !== otp) {
       return res.status(400).json({ message: 'Invalid OTP. Please check and try again.' });
     }
 
-    // Check expiry
     if (new Date() > pending.otpExpiry) {
       return res.status(400).json({
         message: 'OTP has expired. Please register again to get a new code.',
@@ -242,7 +217,6 @@ const verifyEmail = async (req, res) => {
       });
     }
 
-    // ✅ OTP correct & not expired — NOW create the User
     const newUser = await prisma.user.create({
       data: {
         name: pending.name,
@@ -260,26 +234,19 @@ const verifyEmail = async (req, res) => {
       },
     });
 
-    // Delete pending record
     await prisma.pendingRegistration.delete({ where: { email } });
 
     const token = jwt.sign({ userId: newUser.id }, process.env.JWT_SECRET, {
       expiresIn: '7d',
     });
 
-    console.log(`✅ User created after OTP verify: ${email}`);
-
     res.json({
       message: '✅ Email verified! Welcome to MentorBridge.',
       token,
       user: {
-        id: newUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        avatar: newUser.avatar || null,
-        department: newUser.department,
-        batch: newUser.batch,
+        id: newUser.id, name: newUser.name, email: newUser.email,
+        role: newUser.role, avatar: newUser.avatar || null,
+        department: newUser.department, batch: newUser.batch,
       },
     });
   } catch (error) {
@@ -288,9 +255,7 @@ const verifyEmail = async (req, res) => {
   }
 };
 
-// ============================================================
-// LOGIN — normal, no OTP required
-// ============================================================
+// ============ LOGIN ============
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -300,7 +265,6 @@ const login = async (req, res) => {
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      // Check if they have a pending (unverified) registration
       const pending = await prisma.pendingRegistration.findUnique({ where: { email } });
       if (pending) {
         return res.status(403).json({
@@ -327,7 +291,6 @@ const login = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
-    // User exists in User table = already verified, just login
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
       expiresIn: '7d',
     });
@@ -336,13 +299,9 @@ const login = async (req, res) => {
       message: 'Login successful',
       token,
       user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        avatar: user.avatar || null,
-        department: user.department,
-        batch: user.batch,
+        id: user.id, name: user.name, email: user.email,
+        role: user.role, avatar: user.avatar || null,
+        department: user.department, batch: user.batch,
       },
     });
   } catch (error) {
@@ -351,9 +310,7 @@ const login = async (req, res) => {
   }
 };
 
-// ============================================================
-// GOOGLE LOGIN
-// ============================================================
+// ============ GOOGLE LOGIN ============
 const googleLogin = async (req, res) => {
   try {
     if (!googleClient) {
@@ -368,11 +325,9 @@ const googleLogin = async (req, res) => {
     });
     const { sub: googleId, email, name, picture } = ticket.getPayload();
 
-    // Check if user already exists
     let user = await prisma.user.findUnique({ where: { email } });
 
     if (user) {
-      // Existing user — just login
       if (!user.googleId) {
         user = await prisma.user.update({
           where: { email },
@@ -392,17 +347,10 @@ const googleLogin = async (req, res) => {
       });
     }
 
-    // NEW user — don't create account yet, return temp data
-    // They must complete registration form first
     return res.status(200).json({
       message: 'Complete your registration',
       isNewUser: true,
-      googleData: {
-        googleId,
-        email,
-        name,
-        avatar: picture,
-      },
+      googleData: { googleId, email, name, avatar: picture },
     });
   } catch (error) {
     console.error('Google login error:', error.message);
@@ -410,9 +358,68 @@ const googleLogin = async (req, res) => {
   }
 };
 
-// ============================================================
-// FORGOT PASSWORD
-// ============================================================
+// ============ GOOGLE COMPLETE ============
+const googleComplete = async (req, res) => {
+  try {
+    const {
+      googleId, email, name, avatar,
+      batch, department, role, studentId,
+      bloodGroup, gender, bio, skills,
+    } = req.body;
+
+    if (!googleId || !email || !department || !batch) {
+      return res.status(400).json({
+        message: 'Department and batch are required to complete registration',
+      });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      const token = jwt.sign({ userId: existing.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+      return res.json({
+        message: 'Account already exists',
+        token,
+        user: {
+          id: existing.id, name: existing.name, email: existing.email,
+          role: existing.role, avatar: existing.avatar || null,
+          department: existing.department, batch: existing.batch,
+        },
+      });
+    }
+
+    const user = await prisma.user.create({
+      data: {
+        name, email, password: '',
+        googleId, avatar: avatar || null,
+        emailVerified: true,
+        batch: batch || '',
+        department: department || '',
+        role: role || 'junior',
+        studentId: studentId || null,
+        bloodGroup: bloodGroup || null,
+        bio: bio || null,
+        skills: skills || null,
+        gender: gender || 'male',
+      },
+    });
+
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({
+      message: 'Registration complete! Welcome to MentorBridge.',
+      token,
+      user: {
+        id: user.id, name: user.name, email: user.email,
+        role: user.role, avatar: user.avatar || null,
+        department: user.department, batch: user.batch,
+      },
+    });
+  } catch (error) {
+    console.error('Google complete error:', error.message);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+// ============ FORGOT PASSWORD ============
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -429,10 +436,7 @@ const forgotPassword = async (req, res) => {
 
     const otp = generateOTP();
     const expiry = new Date(Date.now() + 10 * 60 * 1000);
-    await prisma.user.update({
-      where: { email },
-      data: { resetToken: otp, resetExpiry: expiry },
-    });
+    await prisma.user.update({ where: { email }, data: { resetToken: otp, resetExpiry: expiry } });
 
     try {
       await sendOTPEmail(email, otp, 'reset');
@@ -447,9 +451,7 @@ const forgotPassword = async (req, res) => {
   }
 };
 
-// ============================================================
-// VERIFY RESET OTP
-// ============================================================
+// ============ VERIFY RESET OTP ============
 const verifyResetOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -467,9 +469,7 @@ const verifyResetOTP = async (req, res) => {
   }
 };
 
-// ============================================================
-// RESET PASSWORD
-// ============================================================
+// ============ RESET PASSWORD ============
 const resetPassword = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
@@ -496,6 +496,6 @@ const resetPassword = async (req, res) => {
 };
 
 module.exports = {
-  register, verifyEmail, login, googleLogin,
+  register, verifyEmail, login, googleLogin, googleComplete,
   forgotPassword, verifyResetOTP, resetPassword,
 };
