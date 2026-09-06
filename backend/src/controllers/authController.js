@@ -9,90 +9,40 @@ try {
 } catch (e) {}
 
 // ============ EMAIL SETUP ============
-let transporter = null;
-try {
-  const nodemailer = require('nodemailer');
-  if (
-    process.env.EMAIL_USER &&
-    process.env.EMAIL_PASS &&
-    process.env.EMAIL_USER.includes('@') &&
-    !process.env.EMAIL_USER.startsWith('actual_gmail')
-  ) {
-    transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      family: 4,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
-    transporter.verify((err) => {
-      if (err) {
-        console.log('⚠️ Email config error:', err.message);
-        transporter = null;
-      } else {
-        console.log('✅ Email service ready:', process.env.EMAIL_USER);
-      }
-    });
-  } else {
-    console.log('⚠️ Email not configured properly');
-  }
-} catch (e) {
-  console.log('⚠️ Nodemailer error:', e.message);
+// ============ EMAIL SETUP ============
+const { Resend } = require('resend');
+let resend = null;
+
+if (process.env.RESEND_API_KEY) {
+  resend = new Resend(process.env.RESEND_API_KEY);
+  console.log('✅ Resend email service ready');
+} else {
+  console.log('⚠️ Resend API key not configured');
 }
 
-const generateOTP = () =>
-  Math.floor(100000 + Math.random() * 900000).toString();
-
 const sendOTPEmail = async (email, otp, type = 'verify') => {
-  if (!transporter) throw new Error('EMAIL_NOT_CONFIGURED');
-  const subject =
-    type === 'verify'
-      ? '🌳 Verify Your IIUC MentorBridge Account'
-      : '🔒 Reset Your Password — IIUC MentorBridge';
-  const html = `
-    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;
-      background:#1a2018;color:white;padding:32px;border-radius:14px;
-      border:1px solid rgba(34,197,94,0.2)">
-      <div style="margin-bottom:24px">
-        <div style="color:#22c55e;font-weight:800;font-size:20px">🌳 MentorBridge</div>
-        <div style="color:rgba(255,255,255,0.4);font-size:12px">IIUC Student Hub</div>
-      </div>
-      <h2 style="color:white;font-size:20px;margin-bottom:8px">
-        ${type === 'verify' ? 'Verify Your Email Address' : 'Reset Your Password'}
-      </h2>
-      <p style="color:rgba(255,255,255,0.6);font-size:14px;margin-bottom:24px;line-height:1.6">
-        ${type === 'verify'
-          ? 'Enter this OTP to verify your email and create your MentorBridge account.'
-          : 'Enter this OTP to reset your password.'}
-      </p>
-      <div style="background:#0f3d2e;border-radius:12px;padding:28px;
-        text-align:center;margin:20px 0;border:1px solid rgba(34,197,94,0.3)">
-        <p style="color:rgba(255,255,255,0.4);margin:0 0 10px;font-size:13px;
-          text-transform:uppercase;letter-spacing:0.1em">Your OTP Code</p>
-        <h1 style="color:#22c55e;font-size:48px;letter-spacing:14px;margin:0;font-weight:800">
-          ${otp}
-        </h1>
-        <p style="color:rgba(255,255,255,0.3);font-size:12px;margin:12px 0 0">
-          ⏱ Expires in 10 minutes
-        </p>
-      </div>
-      <p style="color:rgba(255,255,255,0.25);font-size:12px;text-align:center;
-        margin-top:20px;line-height:1.6">
-        If you did not request this, please ignore this email.
-      </p>
-    </div>
-  `;
-  await transporter.sendMail({
-    from: `IIUC MentorBridge <${process.env.EMAIL_USER}>`,
+  if (!resend) throw new Error('EMAIL_NOT_CONFIGURED');
+
+  const subject = type === 'verify'
+    ? 'Verify Your IIUC MentorBridge Account'
+    : 'Reset Your Password — IIUC MentorBridge';
+
+  await resend.emails.send({
+    from: 'MentorBridge <onboarding@resend.dev>',
     to: email,
     subject,
-    html,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#1a2018;color:white;padding:32px;border-radius:14px;">
+        <h2 style="color:#22c55e;">MentorBridge</h2>
+        <p style="color:rgba(255,255,255,0.7);">
+          ${type === 'verify' ? 'Enter this OTP to verify your email:' : 'Enter this OTP to reset your password:'}
+        </p>
+        <div style="background:#0f3d2e;border-radius:12px;padding:28px;text-align:center;margin:20px 0;">
+          <h1 style="color:#22c55e;font-size:48px;letter-spacing:14px;margin:0;">${otp}</h1>
+          <p style="color:rgba(255,255,255,0.4);margin:10px 0 0;">Expires in 10 minutes</p>
+        </div>
+      </div>
+    `
   });
 };
 
@@ -121,7 +71,7 @@ const register = async (req, res) => {
       });
     }
 
-    if (!transporter) {
+    if (!resend) {
       return res.status(503).json({
         message: 'Email verification service is not available. Please contact admin.',
         error: 'EMAIL_NOT_CONFIGURED',
@@ -428,9 +378,9 @@ const forgotPassword = async (req, res) => {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.status(404).json({ message: 'No account found with this email' });
 
-    if (!transporter) {
+    if (!resend) {
       return res.status(503).json({
-        message: 'Email service not configured. Cannot send reset OTP.',
+        message: 'Email service not configured.',
       });
     }
 
