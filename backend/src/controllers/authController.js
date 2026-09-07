@@ -9,7 +9,6 @@ try {
 } catch (e) {}
 
 // ============ EMAIL SETUP ============
-// ============ EMAIL SETUP ============
 const { Resend } = require('resend');
 let resend = null;
 
@@ -19,6 +18,10 @@ if (process.env.RESEND_API_KEY) {
 } else {
   console.log('⚠️ Resend API key not configured');
 }
+
+// Helper function to generate 6-digit OTP
+const generateOTP = () =>
+  Math.floor(100000 + Math.random() * 900000).toString();
 
 const sendOTPEmail = async (email, otp, type = 'verify') => {
   if (!resend) throw new Error('EMAIL_NOT_CONFIGURED');
