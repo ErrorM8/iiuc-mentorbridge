@@ -9,61 +9,70 @@ try {
 } catch (e) {}
 
 // ============ EMAIL SETUP ============
-let transporter = null;
+let resend = null;
 try {
-  const nodemailer = require('nodemailer');
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    transporter = nodemailer.createTransport({
-      host: 'smtp-relay.brevo.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
-    transporter.verify((err) => {
-      if (err) {
-        console.log('⚠️ Email error:', err.message);
-        transporter = null;
-      } else {
-        console.log('✅ Brevo email ready');
-      }
-    });
+  const { Resend } = require('resend');
+  if (process.env.RESEND_API_KEY) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+    console.log('✅ Resend email ready');
+  } else {
+    console.log('⚠️ RESEND_API_KEY not set');
   }
 } catch (e) {
-  console.log('⚠️ Email error:', e.message);
+  console.log('⚠️ Resend error:', e.message);
 }
 
 const generateOTP = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
 
 const sendOTPEmail = async (email, otp, type = 'verify') => {
-  if (!transporter) throw new Error('EMAIL_NOT_CONFIGURED');
+  if (!resend) throw new Error('EMAIL_NOT_CONFIGURED');
+
   const subject = type === 'verify'
     ? 'Verify Your IIUC MentorBridge Account'
     : 'Reset Your Password — IIUC MentorBridge';
-  const html = `
-    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;background:#1a2018;color:white;padding:32px;border-radius:14px;">
-      <h2 style="color:#22c55e;">🌳 MentorBridge</h2>
-      <p style="color:rgba(255,255,255,0.7);">
-        ${type === 'verify' ? 'Enter this OTP to verify your email:' : 'Enter this OTP to reset your password:'}
-      </p>
-      <div style="background:#0f3d2e;border-radius:12px;padding:28px;text-align:center;margin:20px 0;">
-        <h1 style="color:#22c55e;font-size:48px;letter-spacing:14px;margin:0;">${otp}</h1>
-        <p style="color:rgba(255,255,255,0.4);margin:10px 0 0;">Expires in 10 minutes</p>
-      </div>
-      <p style="color:rgba(255,255,255,0.25);font-size:12px;text-align:center;">
-        If you did not request this, please ignore this email.
-      </p>
-    </div>
-  `;
-  await transporter.sendMail({
-    from: `IIUC MentorBridge <${process.env.EMAIL_USER}>`,
-    to: email,
+
+  const result = await resend.emails.send({
+    from: 'MentorBridge <onboarding@resend.dev>',
+    to: [email],
     subject,
-    html,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;
+        background:#1a2018;color:white;padding:32px;border-radius:14px;
+        border:1px solid #22c55e22;">
+        <h2 style="color:#22c55e;margin-bottom:8px;">MentorBridge</h2>
+        <p style="color:rgba(255,255,255,0.5);font-size:12px;margin-bottom:24px;">IIUC Student Hub</p>
+        <p style="color:rgba(255,255,255,0.7);font-size:15px;">
+          ${type === 'verify'
+            ? 'Enter this OTP to verify your email and create your account:'
+            : 'Enter this OTP to reset your password:'}
+        </p>
+        <div style="background:#0f3d2e;border-radius:12px;padding:28px;
+          text-align:center;margin:24px 0;border:1px solid #22c55e44;">
+          <p style="color:rgba(255,255,255,0.4);margin:0 0 8px;
+            font-size:12px;text-transform:uppercase;letter-spacing:2px;">
+            Your OTP Code
+          </p>
+          <h1 style="color:#22c55e;font-size:52px;letter-spacing:16px;margin:0;font-weight:800;">
+            ${otp}
+          </h1>
+          <p style="color:rgba(255,255,255,0.35);font-size:12px;margin:12px 0 0;">
+            Expires in 10 minutes
+          </p>
+        </div>
+        <p style="color:rgba(255,255,255,0.2);font-size:12px;text-align:center;">
+          If you did not request this, please ignore this email.
+        </p>
+      </div>
+    `,
   });
+
+  console.log('📧 Resend result:', JSON.stringify(result));
+
+  if (result.error) {
+    console.error('❌ Resend send error:', result.error);
+    throw new Error(result.error.message || 'Email send failed');
+  }
 };
 
 // ============ REGISTER ============
@@ -91,7 +100,7 @@ const register = async (req, res) => {
       });
     }
 
-    if (!transporter) {
+    if (!resend) {
       return res.status(503).json({
         message: 'Email verification service is not available. Please contact admin.',
         error: 'EMAIL_NOT_CONFIGURED',
@@ -133,7 +142,7 @@ const register = async (req, res) => {
 
     try {
       await sendOTPEmail(email, otp, 'verify');
-      console.log(`✅ OTP sent to ${email}`);
+      console.log(`✅ OTP sent to ${email}: ${otp}`);
       return res.status(201).json({
         message: 'OTP sent to your email. Please verify to create your account.',
         needsVerification: true,
@@ -143,7 +152,7 @@ const register = async (req, res) => {
       console.error('❌ Email failed:', emailErr.message);
       await prisma.pendingRegistration.delete({ where: { email } }).catch(() => {});
       return res.status(500).json({
-        message: 'Failed to send verification email. Please check your email address and try again.',
+        message: 'Failed to send verification email. Please try again.',
         error: 'EMAIL_SEND_FAILED',
       });
     }
@@ -182,7 +191,7 @@ const verifyEmail = async (req, res) => {
 
     if (new Date() > pending.otpExpiry) {
       return res.status(400).json({
-        message: 'OTP has expired. Please register again to get a new code.',
+        message: 'OTP has expired. Please register again.',
         expired: true,
       });
     }
@@ -211,7 +220,7 @@ const verifyEmail = async (req, res) => {
     });
 
     res.json({
-      message: '✅ Email verified! Welcome to MentorBridge.',
+      message: 'Email verified! Welcome to MentorBridge.',
       token,
       user: {
         id: newUser.id, name: newUser.name, email: newUser.email,
@@ -238,7 +247,7 @@ const login = async (req, res) => {
       const pending = await prisma.pendingRegistration.findUnique({ where: { email } });
       if (pending) {
         return res.status(403).json({
-          message: 'Your email is not verified yet. Please complete OTP verification first.',
+          message: 'Your email is not verified yet. Please complete OTP verification.',
           needsVerification: true,
           email,
         });
@@ -250,10 +259,6 @@ const login = async (req, res) => {
       return res.status(400).json({
         message: 'This account uses Google login. Please sign in with Google.',
       });
-    }
-
-    if (!user.password) {
-      return res.status(400).json({ message: 'Invalid email or password' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
@@ -331,16 +336,10 @@ const googleLogin = async (req, res) => {
 // ============ GOOGLE COMPLETE ============
 const googleComplete = async (req, res) => {
   try {
-    const {
-      googleId, email, name, avatar,
-      batch, department, role, studentId,
-      bloodGroup, gender, bio, skills,
-    } = req.body;
+    const { googleId, email, name, avatar, batch, department, role, studentId, bloodGroup, gender, bio, skills } = req.body;
 
     if (!googleId || !email || !department || !batch) {
-      return res.status(400).json({
-        message: 'Department and batch are required to complete registration',
-      });
+      return res.status(400).json({ message: 'Department and batch are required' });
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -349,42 +348,21 @@ const googleComplete = async (req, res) => {
       return res.json({
         message: 'Account already exists',
         token,
-        user: {
-          id: existing.id, name: existing.name, email: existing.email,
-          role: existing.role, avatar: existing.avatar || null,
-          department: existing.department, batch: existing.batch,
-        },
+        user: { id: existing.id, name: existing.name, email: existing.email, role: existing.role, avatar: existing.avatar || null, department: existing.department, batch: existing.batch },
       });
     }
 
     const user = await prisma.user.create({
-      data: {
-        name, email, password: '',
-        googleId, avatar: avatar || null,
-        emailVerified: true,
-        batch: batch || '',
-        department: department || '',
-        role: role || 'junior',
-        studentId: studentId || null,
-        bloodGroup: bloodGroup || null,
-        bio: bio || null,
-        skills: skills || null,
-        gender: gender || 'male',
-      },
+      data: { name, email, password: '', googleId, avatar: avatar || null, emailVerified: true, batch: batch || '', department: department || '', role: role || 'junior', studentId: studentId || null, bloodGroup: bloodGroup || null, bio: bio || null, skills: skills || null, gender: gender || 'male' },
     });
 
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.status(201).json({
-      message: 'Registration complete! Welcome to MentorBridge.',
+      message: 'Registration complete!',
       token,
-      user: {
-        id: user.id, name: user.name, email: user.email,
-        role: user.role, avatar: user.avatar || null,
-        department: user.department, batch: user.batch,
-      },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar || null, department: user.department, batch: user.batch },
     });
   } catch (error) {
-    console.error('Google complete error:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -398,10 +376,8 @@ const forgotPassword = async (req, res) => {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.status(404).json({ message: 'No account found with this email' });
 
-    if (!transporter) {
-      return res.status(503).json({
-        message: 'Email service not configured.',
-      });
+    if (!resend) {
+      return res.status(503).json({ message: 'Email service not configured.' });
     }
 
     const otp = generateOTP();
@@ -412,11 +388,9 @@ const forgotPassword = async (req, res) => {
       await sendOTPEmail(email, otp, 'reset');
       res.json({ message: 'OTP sent to your email', email });
     } catch (emailErr) {
-      console.error('Forgot password email failed:', emailErr.message);
-      res.status(500).json({ message: 'Failed to send reset email. Please try again.' });
+      res.status(500).json({ message: 'Failed to send reset email.' });
     }
   } catch (error) {
-    console.error('Forgot password error:', error.message);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
@@ -431,7 +405,7 @@ const verifyResetOTP = async (req, res) => {
       return res.status(400).json({ message: 'Invalid OTP' });
     }
     if (new Date() > user.resetExpiry) {
-      return res.status(400).json({ message: 'OTP expired. Please request a new one.' });
+      return res.status(400).json({ message: 'OTP expired.' });
     }
     res.json({ message: 'OTP verified', email });
   } catch (error) {
