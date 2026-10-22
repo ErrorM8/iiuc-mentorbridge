@@ -9,50 +9,63 @@ try {
 } catch (e) {}
 
 // ============ EMAIL SETUP ============
-let resend = null;
+let transporter = null;
 try {
-  const { Resend } = require('resend');
-  if (process.env.RESEND_API_KEY) {
-    resend = new Resend(process.env.RESEND_API_KEY);
-    console.log('✅ Resend email ready');
+  const nodemailer = require('nodemailer');
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+    transporter.verify((err) => {
+      if (err) {
+        console.log('Email error:', err.message);
+        transporter = null;
+      } else {
+        console.log('✅ Gmail SMTP ready:', process.env.EMAIL_USER);
+      }
+    });
   } else {
-    console.log('⚠️ RESEND_API_KEY not set');
+    console.log('⚠️ Email not configured');
   }
 } catch (e) {
-  console.log('⚠️ Resend error:', e.message);
+  console.log('⚠️ Email setup error:', e.message);
 }
 
 const generateOTP = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
 
 const sendOTPEmail = async (email, otp, type = 'verify') => {
-  if (!resend) throw new Error('EMAIL_NOT_CONFIGURED');
+  if (!transporter) throw new Error('EMAIL_NOT_CONFIGURED');
 
   const subject = type === 'verify'
     ? 'Verify Your IIUC MentorBridge Account'
     : 'Reset Your Password — IIUC MentorBridge';
 
-  const result = await resend.emails.send({
-    from: 'MentorBridge <onboarding@resend.dev>',
-    to: [email],
+  await transporter.sendMail({
+    from: `IIUC MentorBridge <${process.env.EMAIL_USER}>`,
+    to: email,
     subject,
     html: `
       <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;
         background:#1a2018;color:white;padding:32px;border-radius:14px;
-        border:1px solid #22c55e22;">
-        <h2 style="color:#22c55e;margin-bottom:8px;">MentorBridge</h2>
-        <p style="color:rgba(255,255,255,0.5);font-size:12px;margin-bottom:24px;">IIUC Student Hub</p>
+        border:1px solid rgba(34,197,94,0.2)">
+        <h2 style="color:#22c55e;margin:0 0 4px;">MentorBridge</h2>
+        <p style="color:rgba(255,255,255,0.4);font-size:12px;margin:0 0 24px;">IIUC Student Hub</p>
         <p style="color:rgba(255,255,255,0.7);font-size:15px;">
           ${type === 'verify'
             ? 'Enter this OTP to verify your email and create your account:'
             : 'Enter this OTP to reset your password:'}
         </p>
         <div style="background:#0f3d2e;border-radius:12px;padding:28px;
-          text-align:center;margin:24px 0;border:1px solid #22c55e44;">
-          <p style="color:rgba(255,255,255,0.4);margin:0 0 8px;
-            font-size:12px;text-transform:uppercase;letter-spacing:2px;">
-            Your OTP Code
-          </p>
+          text-align:center;margin:20px 0;border:1px solid rgba(34,197,94,0.3)">
+          <p style="color:rgba(255,255,255,0.4);margin:0 0 8px;font-size:12px;
+            text-transform:uppercase;letter-spacing:2px;">Your OTP Code</p>
           <h1 style="color:#22c55e;font-size:52px;letter-spacing:16px;margin:0;font-weight:800;">
             ${otp}
           </h1>
@@ -66,13 +79,7 @@ const sendOTPEmail = async (email, otp, type = 'verify') => {
       </div>
     `,
   });
-
-  console.log('📧 Resend result:', JSON.stringify(result));
-
-  if (result.error) {
-    console.error('❌ Resend send error:', result.error);
-    throw new Error(result.error.message || 'Email send failed');
-  }
+  console.log(`✅ Email sent to ${email}`);
 };
 
 // ============ REGISTER ============
@@ -100,7 +107,7 @@ const register = async (req, res) => {
       });
     }
 
-    if (!resend) {
+    if (!transporter) {
       return res.status(503).json({
         message: 'Email verification service is not available. Please contact admin.',
         error: 'EMAIL_NOT_CONFIGURED',
@@ -142,14 +149,13 @@ const register = async (req, res) => {
 
     try {
       await sendOTPEmail(email, otp, 'verify');
-      console.log(`✅ OTP sent to ${email}: ${otp}`);
       return res.status(201).json({
         message: 'OTP sent to your email. Please verify to create your account.',
         needsVerification: true,
         email,
       });
     } catch (emailErr) {
-      console.error('❌ Email failed:', emailErr.message);
+      console.error('Email failed:', emailErr.message);
       await prisma.pendingRegistration.delete({ where: { email } }).catch(() => {});
       return res.status(500).json({
         message: 'Failed to send verification email. Please try again.',
@@ -191,7 +197,7 @@ const verifyEmail = async (req, res) => {
 
     if (new Date() > pending.otpExpiry) {
       return res.status(400).json({
-        message: 'OTP has expired. Please register again to get a new code.',
+        message: 'OTP has expired. Please register again.',
         expired: true,
       });
     }
@@ -220,7 +226,7 @@ const verifyEmail = async (req, res) => {
     });
 
     res.json({
-      message: '✅ Email verified! Welcome to MentorBridge.',
+      message: 'Email verified! Welcome to MentorBridge.',
       token,
       user: {
         id: newUser.id, name: newUser.name, email: newUser.email,
@@ -301,7 +307,6 @@ const googleLogin = async (req, res) => {
     const { sub: googleId, email, name, picture } = ticket.getPayload();
 
     let user = await prisma.user.findUnique({ where: { email } });
-
     if (user) {
       if (!user.googleId) {
         user = await prisma.user.update({
@@ -336,7 +341,11 @@ const googleLogin = async (req, res) => {
 // ============ GOOGLE COMPLETE ============
 const googleComplete = async (req, res) => {
   try {
-    const { googleId, email, name, avatar, batch, department, role, studentId, bloodGroup, gender, bio, skills } = req.body;
+    const {
+      googleId, email, name, avatar,
+      batch, department, role, studentId,
+      bloodGroup, gender, bio, skills,
+    } = req.body;
 
     if (!googleId || !email || !department || !batch) {
       return res.status(400).json({ message: 'Department and batch are required' });
@@ -348,19 +357,39 @@ const googleComplete = async (req, res) => {
       return res.json({
         message: 'Account already exists',
         token,
-        user: { id: existing.id, name: existing.name, email: existing.email, role: existing.role, avatar: existing.avatar || null, department: existing.department, batch: existing.batch },
+        user: {
+          id: existing.id, name: existing.name, email: existing.email,
+          role: existing.role, avatar: existing.avatar || null,
+          department: existing.department, batch: existing.batch,
+        },
       });
     }
 
     const user = await prisma.user.create({
-      data: { name, email, password: '', googleId, avatar: avatar || null, emailVerified: true, batch: batch || '', department: department || '', role: role || 'junior', studentId: studentId || null, bloodGroup: bloodGroup || null, bio: bio || null, skills: skills || null, gender: gender || 'male' },
+      data: {
+        name, email, password: '',
+        googleId, avatar: avatar || null,
+        emailVerified: true,
+        batch: batch || '',
+        department: department || '',
+        role: role || 'junior',
+        studentId: studentId || null,
+        bloodGroup: bloodGroup || null,
+        bio: bio || null,
+        skills: skills || null,
+        gender: gender || 'male',
+      },
     });
 
     const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
     res.status(201).json({
       message: 'Registration complete!',
       token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar || null, department: user.department, batch: user.batch },
+      user: {
+        id: user.id, name: user.name, email: user.email,
+        role: user.role, avatar: user.avatar || null,
+        department: user.department, batch: user.batch,
+      },
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -376,7 +405,7 @@ const forgotPassword = async (req, res) => {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.status(404).json({ message: 'No account found with this email' });
 
-    if (!resend) {
+    if (!transporter) {
       return res.status(503).json({ message: 'Email service not configured.' });
     }
 
