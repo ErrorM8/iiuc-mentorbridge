@@ -8,48 +8,33 @@ try {
   googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 } catch (e) {}
 
-// ============ EMAIL SETUP ============
-let transporter = null;
+// ============ EMAIL SETUP (Resend) ============
+let resendClient = null;
 try {
-  const nodemailer = require('nodemailer');
-  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-    transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-    transporter.verify((err) => {
-      if (err) {
-        console.log('Email error:', err.message);
-        transporter = null;
-      } else {
-        console.log('✅ Gmail SMTP ready:', process.env.EMAIL_USER);
-      }
-    });
+  const { Resend } = require('resend');
+  if (process.env.RESEND_API_KEY) {
+    resendClient = new Resend(process.env.RESEND_API_KEY);
+    console.log('✅ Resend email ready');
   } else {
-    console.log('⚠️ Email not configured');
+    console.log('⚠️ RESEND_API_KEY not set');
   }
 } catch (e) {
-  console.log('⚠️ Email setup error:', e.message);
+  console.log('⚠️ Resend setup error:', e.message);
 }
 
 const generateOTP = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
 
 const sendOTPEmail = async (email, otp, type = 'verify') => {
-  if (!transporter) throw new Error('EMAIL_NOT_CONFIGURED');
+  if (!resendClient) throw new Error('EMAIL_NOT_CONFIGURED');
 
   const subject = type === 'verify'
     ? 'Verify Your IIUC MentorBridge Account'
     : 'Reset Your Password — IIUC MentorBridge';
 
-  await transporter.sendMail({
-    from: `IIUC MentorBridge <${process.env.EMAIL_USER}>`,
-    to: email,
+  const { data, error } = await resendClient.emails.send({
+    from: 'MentorBridge <onboarding@resend.dev>',
+    to: [email],
     subject,
     html: `
       <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;
@@ -79,7 +64,13 @@ const sendOTPEmail = async (email, otp, type = 'verify') => {
       </div>
     `,
   });
-  console.log(`✅ Email sent to ${email}`);
+
+  if (error) {
+    console.error('❌ Resend error:', error);
+    throw new Error(error.message || 'Email send failed');
+  }
+
+  console.log('✅ Email sent:', data?.id, '→', email);
 };
 
 // ============ REGISTER ============
@@ -107,7 +98,7 @@ const register = async (req, res) => {
       });
     }
 
-    if (!transporter) {
+    if (!resendClient) {
       return res.status(503).json({
         message: 'Email verification service is not available. Please contact admin.',
         error: 'EMAIL_NOT_CONFIGURED',
@@ -405,7 +396,7 @@ const forgotPassword = async (req, res) => {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.status(404).json({ message: 'No account found with this email' });
 
-    if (!transporter) {
+    if (!resendClient) {
       return res.status(503).json({ message: 'Email service not configured.' });
     }
 
