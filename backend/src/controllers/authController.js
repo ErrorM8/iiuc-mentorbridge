@@ -8,69 +8,71 @@ try {
   googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 } catch (e) {}
 
-// ============ EMAIL SETUP (Resend) ============
-let resendClient = null;
+// ============ EMAIL SETUP (Brevo) ============
+let brevoApi = null;
 try {
-  const { Resend } = require('resend');
-  if (process.env.RESEND_API_KEY) {
-    resendClient = new Resend(process.env.RESEND_API_KEY);
-    console.log('✅ Resend email ready');
+  const SibApiV3Sdk = require('@getbrevo/brevo');
+  if (process.env.BREVO_API_KEY) {
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+    const apiKey = apiInstance.authentications['apiKey'];
+    apiKey.apiKey = process.env.BREVO_API_KEY;
+    brevoApi = apiInstance;
+    console.log('✅ Brevo email ready');
   } else {
-    console.log('⚠️ RESEND_API_KEY not set');
+    console.log('⚠️ BREVO_API_KEY not set');
   }
 } catch (e) {
-  console.log('⚠️ Resend setup error:', e.message);
+  console.log('⚠️ Brevo setup error:', e.message);
 }
 
 const generateOTP = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
 
 const sendOTPEmail = async (email, otp, type = 'verify') => {
-  if (!resendClient) throw new Error('EMAIL_NOT_CONFIGURED');
+  if (!brevoApi) throw new Error('EMAIL_NOT_CONFIGURED');
 
+  const SibApiV3Sdk = require('@getbrevo/brevo');
   const subject = type === 'verify'
     ? 'Verify Your IIUC MentorBridge Account'
     : 'Reset Your Password — IIUC MentorBridge';
 
-  const { data, error } = await resendClient.emails.send({
-    from: 'MentorBridge <onboarding@resend.dev>',
-    to: [email],
-    subject,
-    html: `
-      <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;
-        background:#1a2018;color:white;padding:32px;border-radius:14px;
-        border:1px solid rgba(34,197,94,0.2)">
-        <h2 style="color:#22c55e;margin:0 0 4px;">MentorBridge</h2>
-        <p style="color:rgba(255,255,255,0.4);font-size:12px;margin:0 0 24px;">IIUC Student Hub</p>
-        <p style="color:rgba(255,255,255,0.7);font-size:15px;">
-          ${type === 'verify'
-            ? 'Enter this OTP to verify your email and create your account:'
-            : 'Enter this OTP to reset your password:'}
-        </p>
-        <div style="background:#0f3d2e;border-radius:12px;padding:28px;
-          text-align:center;margin:20px 0;border:1px solid rgba(34,197,94,0.3)">
-          <p style="color:rgba(255,255,255,0.4);margin:0 0 8px;font-size:12px;
-            text-transform:uppercase;letter-spacing:2px;">Your OTP Code</p>
-          <h1 style="color:#22c55e;font-size:52px;letter-spacing:16px;margin:0;font-weight:800;">
-            ${otp}
-          </h1>
-          <p style="color:rgba(255,255,255,0.35);font-size:12px;margin:12px 0 0;">
-            Expires in 10 minutes
-          </p>
-        </div>
-        <p style="color:rgba(255,255,255,0.2);font-size:12px;text-align:center;">
-          If you did not request this, please ignore this email.
+  const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+  sendSmtpEmail.subject = subject;
+  sendSmtpEmail.to = [{ email }];
+  sendSmtpEmail.sender = {
+    name: 'IIUC MentorBridge',
+    email: process.env.EMAIL_FROM || 'islamsakifbul@gmail.com'
+  };
+  sendSmtpEmail.htmlContent = `
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;
+      background:#1a2018;color:white;padding:32px;border-radius:14px;
+      border:1px solid rgba(34,197,94,0.2)">
+      <h2 style="color:#22c55e;margin:0 0 4px;">MentorBridge</h2>
+      <p style="color:rgba(255,255,255,0.4);font-size:12px;margin:0 0 24px;">IIUC Student Hub</p>
+      <p style="color:rgba(255,255,255,0.7);font-size:15px;">
+        ${type === 'verify'
+          ? 'Enter this OTP to verify your email:'
+          : 'Enter this OTP to reset your password:'}
+      </p>
+      <div style="background:#0f3d2e;border-radius:12px;padding:28px;
+        text-align:center;margin:20px 0;border:1px solid rgba(34,197,94,0.3)">
+        <p style="color:rgba(255,255,255,0.4);margin:0 0 8px;font-size:12px;
+          text-transform:uppercase;letter-spacing:2px;">Your OTP Code</p>
+        <h1 style="color:#22c55e;font-size:52px;letter-spacing:16px;margin:0;font-weight:800;">
+          ${otp}
+        </h1>
+        <p style="color:rgba(255,255,255,0.35);font-size:12px;margin:12px 0 0;">
+          Expires in 10 minutes
         </p>
       </div>
-    `,
-  });
+      <p style="color:rgba(255,255,255,0.2);font-size:12px;text-align:center;">
+        If you did not request this, please ignore this email.
+      </p>
+    </div>
+  `;
 
-  if (error) {
-    console.error('❌ Resend error:', error);
-    throw new Error(error.message || 'Email send failed');
-  }
-
-  console.log('✅ Email sent:', data?.id, '→', email);
+  await brevoApi.sendTransacEmail(sendSmtpEmail);
+  console.log('✅ Email sent to:', email);
 };
 
 // ============ REGISTER ============
