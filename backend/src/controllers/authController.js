@@ -8,42 +8,22 @@ try {
   googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 } catch (e) {}
 
-// ============ EMAIL SETUP (Brevo) ============
-let brevoApi = null;
-try {
-  const SibApiV3Sdk = require('@getbrevo/brevo');
-  if (process.env.BREVO_API_KEY) {
-    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-    const apiKey = apiInstance.authentications['apiKey'];
-    apiKey.apiKey = process.env.BREVO_API_KEY;
-    brevoApi = apiInstance;
-    console.log('✅ Brevo email ready');
-  } else {
-    console.log('⚠️ BREVO_API_KEY not set');
-  }
-} catch (e) {
-  console.log('⚠️ Brevo setup error:', e.message);
-}
+// ============ EMAIL SETUP (Brevo HTTP API — no SDK) ============
+const BREVO_ENABLED = !!process.env.BREVO_API_KEY;
+if (BREVO_ENABLED) console.log('✅ Brevo email ready');
+else console.log('⚠️ BREVO_API_KEY not set');
 
 const generateOTP = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
 
 const sendOTPEmail = async (email, otp, type = 'verify') => {
-  if (!brevoApi) throw new Error('EMAIL_NOT_CONFIGURED');
+  if (!BREVO_ENABLED) throw new Error('EMAIL_NOT_CONFIGURED');
 
-  const SibApiV3Sdk = require('@getbrevo/brevo');
   const subject = type === 'verify'
     ? 'Verify Your IIUC MentorBridge Account'
     : 'Reset Your Password — IIUC MentorBridge';
 
-  const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
-  sendSmtpEmail.subject = subject;
-  sendSmtpEmail.to = [{ email }];
-  sendSmtpEmail.sender = {
-    name: 'IIUC MentorBridge',
-    email: process.env.EMAIL_FROM || 'islamsakifbul@gmail.com'
-  };
-  sendSmtpEmail.htmlContent = `
+  const htmlContent = `
     <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;
       background:#1a2018;color:white;padding:32px;border-radius:14px;
       border:1px solid rgba(34,197,94,0.2)">
@@ -51,19 +31,15 @@ const sendOTPEmail = async (email, otp, type = 'verify') => {
       <p style="color:rgba(255,255,255,0.4);font-size:12px;margin:0 0 24px;">IIUC Student Hub</p>
       <p style="color:rgba(255,255,255,0.7);font-size:15px;">
         ${type === 'verify'
-          ? 'Enter this OTP to verify your email:'
+          ? 'Enter this OTP to verify your email and create your account:'
           : 'Enter this OTP to reset your password:'}
       </p>
       <div style="background:#0f3d2e;border-radius:12px;padding:28px;
         text-align:center;margin:20px 0;border:1px solid rgba(34,197,94,0.3)">
         <p style="color:rgba(255,255,255,0.4);margin:0 0 8px;font-size:12px;
           text-transform:uppercase;letter-spacing:2px;">Your OTP Code</p>
-        <h1 style="color:#22c55e;font-size:52px;letter-spacing:16px;margin:0;font-weight:800;">
-          ${otp}
-        </h1>
-        <p style="color:rgba(255,255,255,0.35);font-size:12px;margin:12px 0 0;">
-          Expires in 10 minutes
-        </p>
+        <h1 style="color:#22c55e;font-size:52px;letter-spacing:16px;margin:0;font-weight:800;">${otp}</h1>
+        <p style="color:rgba(255,255,255,0.35);font-size:12px;margin:12px 0 0;">Expires in 10 minutes</p>
       </div>
       <p style="color:rgba(255,255,255,0.2);font-size:12px;text-align:center;">
         If you did not request this, please ignore this email.
@@ -71,8 +47,30 @@ const sendOTPEmail = async (email, otp, type = 'verify') => {
     </div>
   `;
 
-  await brevoApi.sendTransacEmail(sendSmtpEmail);
-  console.log('✅ Email sent to:', email);
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'content-type': 'application/json',
+      'api-key': process.env.BREVO_API_KEY,
+    },
+    body: JSON.stringify({
+      sender: {
+        name: 'IIUC MentorBridge',
+        email: process.env.EMAIL_FROM || 'islamsakifbul@gmail.com',
+      },
+      to: [{ email }],
+      subject,
+      htmlContent,
+    }),
+  });
+
+  const text = await response.text();
+  if (!response.ok) {
+    console.error('❌ Brevo error:', response.status, text);
+    throw new Error(`Brevo ${response.status}: ${text}`);
+  }
+  console.log('✅ Email sent to:', email, text);
 };
 
 // ============ REGISTER ============
@@ -100,7 +98,7 @@ const register = async (req, res) => {
       });
     }
 
-    if (!resendClient) {
+    if (!BREVO_ENABLED) {
       return res.status(503).json({
         message: 'Email verification service is not available. Please contact admin.',
         error: 'EMAIL_NOT_CONFIGURED',
@@ -214,9 +212,7 @@ const verifyEmail = async (req, res) => {
 
     await prisma.pendingRegistration.delete({ where: { email } });
 
-    const token = jwt.sign({ userId: newUser.id }, process.env.JWT_SECRET, {
-      expiresIn: '7d',
-    });
+    const token = jwt.sign({ userId: newUser.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
     res.json({
       message: 'Email verified! Welcome to MentorBridge.',
@@ -265,9 +261,7 @@ const login = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
-      expiresIn: '7d',
-    });
+    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
     res.json({
       message: 'Login successful',
@@ -398,7 +392,7 @@ const forgotPassword = async (req, res) => {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.status(404).json({ message: 'No account found with this email' });
 
-    if (!resendClient) {
+    if (!BREVO_ENABLED) {
       return res.status(503).json({ message: 'Email service not configured.' });
     }
 
@@ -410,6 +404,7 @@ const forgotPassword = async (req, res) => {
       await sendOTPEmail(email, otp, 'reset');
       res.json({ message: 'OTP sent to your email', email });
     } catch (emailErr) {
+      console.error('Reset email failed:', emailErr.message);
       res.status(500).json({ message: 'Failed to send reset email.' });
     }
   } catch (error) {
