@@ -29,9 +29,33 @@ const upload = multer({
   },
 });
 
+const DEFAULT_DEPARTMENTS = [
+  'CSE', 'CCE', 'EEE', 'ETE', 'Civil Engineering', 'Pharmacy',
+  'BBA', 'MBA', 'English', 'Arabic', 'LIS', 'Law',
+  'Economics & Banking', 'QSIS', 'DIS', 'SHIS',
+];
+
+// ==================== GET DEPARTMENTS (auto-seed) ====================
 const getDepartments = async (req, res) => {
   try {
-    const departments = await prisma.department.findMany({ orderBy: { name: 'asc' } });
+    let departments = await prisma.department.findMany({ orderBy: { name: 'asc' } });
+
+    if (departments.length === 0) {
+      console.log('🌱 Departments empty — seeding defaults...');
+      for (const name of DEFAULT_DEPARTMENTS) {
+        try {
+          await prisma.department.upsert({
+            where: { name },
+            update: {},
+            create: { name },
+          });
+        } catch (e) {
+          console.error('Seed failed for', name, e.message);
+        }
+      }
+      departments = await prisma.department.findMany({ orderBy: { name: 'asc' } });
+    }
+
     res.json(departments);
   } catch (error) {
     console.error('Get departments error:', error.message);
@@ -39,31 +63,26 @@ const getDepartments = async (req, res) => {
   }
 };
 
+// ==================== GET COURSES ====================
 const getCourses = async (req, res) => {
   try {
     const { departmentId, examType } = req.query;
     const where = {};
     if (departmentId) where.departmentId = parseInt(departmentId);
 
-    // examType filter — only if column exists
     if (examType) {
       try {
-        // Try with examType filter
         const courses = await prisma.course.findMany({
           where: { ...where, examType },
           orderBy: { name: 'asc' },
         });
         return res.json(courses);
       } catch (e) {
-        // examType column might not exist yet — return all for department
         console.log('examType filter failed, returning all:', e.message);
       }
     }
 
-    const courses = await prisma.course.findMany({
-      where,
-      orderBy: { name: 'asc' },
-    });
+    const courses = await prisma.course.findMany({ where, orderBy: { name: 'asc' } });
     res.json(courses);
   } catch (error) {
     console.error('Get courses error:', error.message);
@@ -71,6 +90,7 @@ const getCourses = async (req, res) => {
   }
 };
 
+// ==================== CREATE COURSE (folder) ====================
 const createCourse = async (req, res) => {
   try {
     const { name, code, departmentId, examType } = req.body;
@@ -81,10 +101,9 @@ const createCourse = async (req, res) => {
     const dept = await prisma.department.findUnique({ where: { id: parseInt(departmentId) } });
     if (!dept) return res.status(404).json({ message: 'Department not found' });
 
-    // Check duplicate
     try {
       const existing = await prisma.course.findFirst({
-        where: { name, departmentId: parseInt(departmentId), examType: examType || null }
+        where: { name, departmentId: parseInt(departmentId), examType: examType || null },
       });
       if (existing) return res.status(400).json({ message: 'Course folder already exists' });
     } catch {}
@@ -92,12 +111,16 @@ const createCourse = async (req, res) => {
     let course;
     try {
       course = await prisma.course.create({
-        data: { name, code: code || null, departmentId: parseInt(departmentId), examType: examType || null }
+        data: {
+          name,
+          code: code || null,
+          departmentId: parseInt(departmentId),
+          examType: examType || null,
+        },
       });
     } catch (e) {
-      // If examType column doesn't exist yet
       course = await prisma.course.create({
-        data: { name, code: code || null, departmentId: parseInt(departmentId) }
+        data: { name, code: code || null, departmentId: parseInt(departmentId) },
       });
     }
 
@@ -108,6 +131,7 @@ const createCourse = async (req, res) => {
   }
 };
 
+// ==================== GET RESOURCES ====================
 const getResources = async (req, res) => {
   try {
     const { courseId } = req.query;
@@ -117,8 +141,8 @@ const getResources = async (req, res) => {
     const resources = await prisma.resource.findMany({
       where,
       include: {
-        user: { select: { id:true, name:true, avatar:true } },
-        course: { select: { id:true, name:true } },
+        user: { select: { id: true, name: true, avatar: true } },
+        course: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -129,6 +153,7 @@ const getResources = async (req, res) => {
   }
 };
 
+// ==================== SEARCH ====================
 const searchResources = async (req, res) => {
   try {
     const { q } = req.query;
@@ -142,8 +167,8 @@ const searchResources = async (req, res) => {
         ],
       },
       include: {
-        user: { select: { id:true, name:true, avatar:true } },
-        course: { select: { id:true, name:true } },
+        user: { select: { id: true, name: true, avatar: true } },
+        course: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
       take: 20,
@@ -154,6 +179,7 @@ const searchResources = async (req, res) => {
   }
 };
 
+// ==================== UPLOAD ====================
 const uploadResource = async (req, res) => {
   try {
     const { title, courseId } = req.body;
@@ -162,7 +188,7 @@ const uploadResource = async (req, res) => {
 
     const uploadResult = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
-        { resource_type:'raw', folder:'mentorbridge/resources', format:'pdf' },
+        { resource_type: 'raw', folder: 'mentorbridge/resources', format: 'pdf' },
         (error, result) => { if (error) reject(error); else resolve(result); }
       ).end(req.file.buffer);
     });
@@ -176,8 +202,8 @@ const uploadResource = async (req, res) => {
         userId: req.userId,
       },
       include: {
-        user: { select: { id:true, name:true, avatar:true } },
-        course: { select: { id:true, name:true } },
+        user: { select: { id: true, name: true, avatar: true } },
+        course: { select: { id: true, name: true } },
       },
     });
 
@@ -187,22 +213,24 @@ const uploadResource = async (req, res) => {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
+
+// ==================== AI SUMMARY ====================
 const getSummary = async (req, res) => {
   try {
     const resource = await prisma.resource.findUnique({
       where: { id: parseInt(req.params.id) },
-      select: { title:true, fileUrl:true },
+      select: { title: true, fileUrl: true },
     });
     if (!resource) return res.status(404).json({ message: 'Resource not found' });
 
     if (!genAI) {
       return res.json({
-        summary: `📄 **${resource.title}**\n\nAI summary unavailable. Please configure GEMINI_API_KEY in .env to enable AI summaries.`
+        summary: `📄 ${resource.title}\n\nAI summary unavailable. Please configure GEMINI_API_KEY.`,
       });
     }
 
     const model = genAI.getGenerativeModel({ model: 'gemini-3.6-flash' });
-    const prompt = `You are an academic assistant for IIUC students. The document title is: "${resource.title}". Based on the title, generate a helpful 150-200 word academic summary covering: what the document likely covers, key topics to focus on, and study tips. Be practical for university students.`;
+    const prompt = `You are an academic assistant for IIUC students. The document title is: "${resource.title}". Based on the title, write a helpful 150-200 word academic summary: what it likely covers, key topics to focus on, and study tips.`;
     const result = await model.generateContent(prompt);
     res.json({ summary: result.response.text() });
   } catch (error) {
@@ -211,6 +239,7 @@ const getSummary = async (req, res) => {
   }
 };
 
+// ==================== DELETE ====================
 const deleteResource = async (req, res) => {
   try {
     const resource = await prisma.resource.findUnique({ where: { id: parseInt(req.params.id) } });
